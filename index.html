@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0b4f6c" />
+<title>RKSCAN — AI Invoice Chat & Product Matching</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📷</text></svg>" />
+
+<script src="https://js.puter.com/v2/"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+  :root {
+    --brand: #0b4f6c; --brand-dark: #073b51; --accent: #01baef;
+    --bg: #f4f7f9; --card: #fff; --border: #dbe4ea;
+    --text: #1f2933; --muted: #6b7a86;
+    --ok: #1a7f37; --warn: #b35900; --bad: #b42318;
+    --desc: #0b4f6c; --qty: #7b2cbf; --cost: #b35900;
+    --ai: #6d28d9; --ai2: #db2777;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; overscroll-behavior: none; }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { background: var(--brand); color: #fff; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15); z-index: 10; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; flex: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .file-info { font-size: 11px; opacity: .85;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45vw; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: filter .15s; white-space: nowrap; user-select: none; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(1px); }
+  .btn.secondary { background: #e6eef3; color: var(--brand-dark); }
+  .btn.danger { background: #fbe5e5; color: var(--bad); }
+  .btn.ok { background: var(--ok); }
+  .btn.warn { background: var(--warn); }
+  .btn.desc { background: var(--desc); }
+  .btn.qty { background: var(--qty); }
+  .btn.cost { background: var(--cost); }
+  .btn.ai { background: linear-gradient(135deg,var(--ai),var(--ai2)); }
+  .btn.ai-big { background: linear-gradient(135deg,var(--ai),var(--ai2));
+    font-size: 15px; padding: 12px 20px; box-shadow: 0 4px 14px rgba(109,40,217,.35); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.small { padding: 5px 9px; font-size: 12px; }
+  nav.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border);
+    overflow-x: auto; flex-shrink: 0; }
+  nav.tabs button { flex: 1; min-width: 90px; border: none; background: transparent;
+    padding: 10px 8px; font-size: 13px; font-weight: 600; color: var(--muted);
+    cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+  nav.tabs button.active { color: var(--brand); border-bottom-color: var(--accent); }
+  main { flex: 1; overflow: hidden; position: relative; }
+  section.tab { display: none; position: absolute; inset: 0; flex-direction: column; overflow: hidden; }
+  section.tab.active { display: flex; }
+  .toolbar { display: flex; gap: 6px; padding: 8px; background: var(--card);
+    border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+  #previewWrap { flex: 1; display: flex; overflow: hidden; }
+  #canvasContainer { flex: 1; overflow: auto; background: #2c2c2c; position: relative;
+    display: flex; align-items: flex-start; justify-content: center; padding: 10px; }
+  #previewCanvas { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    cursor: crosshair; max-width: 100%; touch-action: none; }
+  #columnPanel { width: 300px; flex-shrink: 0; background: var(--card);
+    border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  #columnPanel .help { padding: 8px; font-size: 11px; color: var(--muted); line-height: 1.5;
+    border-bottom: 1px solid var(--border); }
+  #columnList { flex: 1; overflow-y: auto; padding: 6px; }
+  #columnList .col-item { background: var(--bg); border-left: 3px solid var(--desc);
+    padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; font-size: 12px;
+    display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+  .col-item[data-kind="cost"] { border-left-color: var(--cost); }
+  .col-item[data-kind="qty"] { border-left-color: var(--qty); }
+  .col-item[data-kind="ai"] { border-left-color: var(--ai); }
+  .col-item .meta { font-size: 10px; color: var(--muted); }
+  .col-item .del { background: transparent; border: none; color: var(--bad);
+    cursor: pointer; font-size: 16px; padding: 0 4px; }
+  #selectionInfo { padding: 6px 10px; font-size: 11px; background: #fffbe6;
+    border-top: 1px solid #f0e6b0; color: #7a6b00; }
+  .table-toolbar { display: flex; gap: 6px; padding: 6px 8px; flex-wrap: wrap; align-items: center;
+    border-bottom: 1px solid var(--border); }
+  #tableToolbar3 { background: #f0f7fb; }
+  #tableToolbar4 { background: #e8f5e9; }
+  #tableToolbarAI { background: linear-gradient(90deg,#f3e8ff,#fce7f3); }
+  .supplier-wrap { display: flex; gap: 4px; align-items: center; flex: 1; min-width: 240px; }
+  .supplier-wrap input { flex: 1; min-width: 120px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 5px; font-size: 13px; background: #fff; }
+  #tableScroll { flex: 1; overflow: auto; background: var(--card); }
+  table.data-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.data-table th { position: sticky; top: 0; background: var(--brand-dark); color: #fff;
+    padding: 8px 6px; text-align: left; font-weight: 600; white-space: nowrap;
+    cursor: pointer; z-index: 2; }
+  table.data-table td { padding: 5px 6px; border-bottom: 1px solid var(--border);
+    white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  table.data-table tr:hover td { background: #f0f7fb; }
+  table.data-table td[contenteditable="true"]:focus { outline: 2px solid var(--accent); background: #fff; }
+  .row-selected td { background: #e6f4ff !important; }
+  .status-MATCHED { color: var(--ok); font-weight: 600; }
+  .status-NEW { color: var(--warn); font-weight: 600; }
+  .status-MIXED { color: #7b2cbf; font-weight: 600; }
+  .status-MATCHED-OTHER-SUPPLIER { color: var(--bad); font-weight: 600; }
+  .status-AI-VERIFIED { color: var(--ai); font-weight: 700; }
+  .remark-OLD { color: var(--ok); font-weight: 700; }
+  #cameraModal { position: fixed; inset: 0; background: #000; z-index: 1000;
+    display: none; flex-direction: column; }
+  #cameraModal.show { display: flex; }
+  #cameraVideo { flex: 1; width: 100%; object-fit: cover; background: #000; }
+  #cameraControls { display: flex; justify-content: space-around; align-items: center;
+    padding: 16px; background: #111; }
+  #cameraControls button { background: #fff; color: #000; border: none; border-radius: 50%;
+    width: 64px; height: 64px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  #cameraControls button.close { background: #444; color: #fff; width: 52px; height: 52px; }
+  #debugTab { padding: 10px; overflow-y: auto; }
+  #debugTab pre { background: #1e1e1e; color: #d4d4d4; padding: 10px;
+    border-radius: 6px; font-size: 11px; overflow-x: auto;
+    white-space: pre-wrap; word-break: break-word; }
+  #statusBar { background: var(--brand-dark); color: #fff; padding: 6px 12px;
+    font-size: 12px; display: flex; justify-content: space-between;
+    align-items: center; gap: 10px; flex-shrink: 0; }
+  #statusBar .progress { width: 80px; height: 4px; background: rgba(255,255,255,.2);
+    border-radius: 2px; overflow: hidden; display: none; }
+  #statusBar .progress.show { display: block; }
+  #statusBar .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+  #toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+    background: #222; color: #fff; padding: 10px 16px; border-radius: 6px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s;
+    z-index: 2000; max-width: 90%; text-align: center; }
+  #toast.show { opacity: 1; }
+  .file-input-wrap { position: relative; overflow: hidden; display: inline-block; }
+  .file-input-wrap input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  #aiOverlay { position: absolute; inset: 0; background: rgba(11,79,108,.85);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; z-index: 50; font-size: 16px; }
+  #aiOverlay.show { display: flex; }
+  #aiOverlay .spinner { width: 60px; height: 60px; border: 5px solid rgba(255,255,255,.2);
+    border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;
+    margin-bottom: 20px; }
+  #aiOverlay .ai-step { margin-top: 12px; font-size: 13px; opacity: .9; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 800px) {
+    #columnPanel { width: 220px; } .btn { padding: 7px 10px; font-size: 12px; } }
+  @media (max-width: 640px) {
+    header { padding: 8px 10px; }
+    header h1 { font-size: 14px; }
+    #previewWrap { flex-direction: column; }
+    #columnPanel { width: 100%; max-height: 140px; border-left: none; border-top: 1px solid var(--border); }
+    .col-item .meta { display: none; }
+    .btn { padding: 8px 10px; font-size: 12px; }
+    .btn.small { padding: 6px 8px; }
+    .btn.ai-big { font-size: 14px; padding: 10px 16px; }
+    .toolbar { gap: 4px; padding: 6px; }
+    nav.tabs button { font-size: 12px; min-width: 70px; padding: 8px 4px; }
+  }
+
+  /* ===== AI Chat ===== */
+  #tab-chat { background:#f5f7fa; }
+  .chat-top { padding:12px 16px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .chat-top strong { color:var(--brand-dark); font-size:15px; }
+  .chat-top .chat-subtitle { font-size:11px; color:var(--muted); margin-top:3px; }
+  .chat-top-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #chatModeSelect { min-width:190px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); font:inherit; }
+  .chat-layout { flex:1; min-height:0; display:flex; flex-direction:column; }
+  #chatMessages { flex:1; min-height:170px; overflow:auto; padding:20px max(14px,calc((100% - 900px)/2)); display:flex; flex-direction:column; gap:14px; }
+  .chat-bubble { position:relative; max-width:min(850px,96%); padding:12px 14px; border-radius:14px; line-height:1.55; overflow-wrap:anywhere; box-shadow:0 1px 3px rgba(0,0,0,.045); }
+  .chat-bubble.user { align-self:flex-end; background:#e8f2ff; border:1px solid #d2e4fb; }
+  .chat-bubble.assistant { align-self:flex-start; background:#fff; border:1px solid #e4e8ee; }
+  .chat-bubble .chat-role { font-size:10px; font-weight:750; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
+  .chat-bubble .chat-body { white-space:pre-wrap; }
+  .chat-bubble .chat-copy { margin-top:8px; border:0; background:transparent; color:#526174; cursor:pointer; font-size:11px; padding:3px 0; }
+  .chat-bubble .chat-copy:hover { color:var(--brand-dark); }
+  .chat-bubble pre { white-space:pre-wrap; overflow:auto; background:#17202c; color:#f1f5f9; padding:10px; border-radius:8px; }
+  .chat-bubble code { background:#eef1f5; padding:1px 4px; border-radius:4px; font-family:Consolas,monospace; }
+  .chat-bubble pre code { background:transparent; padding:0; }
+  .chat-bubble table.md-table { border-collapse:collapse; margin:8px 0; font-size:12px; background:#fff; }
+  .chat-bubble table.md-table th,
+  .chat-bubble table.md-table td { border:1px solid #dbe4ea; padding:4px 8px; text-align:left; white-space:nowrap; }
+  .chat-bubble table.md-table th { background:#edf4f8; color:var(--brand-dark); }
+  .chat-download-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; padding-top:8px; border-top:1px dashed #d8dee6; }
+  .chat-download-row .btn { font-size:11px; padding:5px 9px; }
+  .chat-compose { width:min(930px,calc(100% - 24px)); margin:0 auto 12px; padding:10px 12px; background:#fff; border:1px solid #e0e5ec; border-radius:14px; box-shadow:0 4px 18px rgba(20,35,55,.06); display:flex; flex-direction:column; gap:8px; }
+  #chatPrompt { width:100%; min-height:74px; max-height:190px; resize:vertical; border:0; outline:0; padding:7px; font:inherit; background:#fff; }
+  .chat-compose-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+  #chatFiles { display:none; }
+  #chatFileNames { color:var(--muted); font-size:11px; flex:1; min-width:100px; }
+  #chatResultsWrap { max-height:35%; min-height:90px; overflow:auto; border-top:1px solid var(--border); background:#fff; }
+  #chatResultsTitle { position:sticky; top:0; z-index:2; padding:8px 10px; background:#edf4f8; font-weight:700; font-size:12px; }
+  #chatResultsTable { border-collapse:collapse; width:100%; font-size:11px; }
+  #chatResultsTable th { position:sticky; top:32px; background:var(--brand-dark); color:#fff; padding:7px; text-align:left; white-space:nowrap; }
+  #chatResultsTable td { border-bottom:1px solid var(--border); padding:5px 7px; min-width:65px; }
+  #chatResultsTable td[contenteditable=true]:focus { outline:2px solid var(--accent); background:#fffde7; }
+  #chatResultsWrap[hidden] { display:none; }
+  #chatState { font-size:11px; color:var(--muted); }
+  @media(max-width:640px) { #chatMessages { padding:12px; } .chat-bubble { max-width:98%; } #chatResultsWrap { max-height:38%; } .chat-compose { width:calc(100% - 12px); margin-bottom:6px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📷 RKSCAN <span style="font-size:11px;opacity:.7;">AI Invoice Chat (Free / No Key)</span></h1>
+  <div class="file-info" id="fileInfo">No file loaded</div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="preview" class="active">1. Scan</button>
+  <button data-tab="table">2. Table</button>
+  <button data-tab="chat">3. AI Chat</button>
+  <button data-tab="debug">4. Debug</button>
+</nav>
+
+<main>
+  <section class="tab active" id="tab-preview">
+    <div class="toolbar">
+      <div class="file-input-wrap">
+        <button class="btn">📁 Open</button>
+        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.bmp,.webp,.xlsx,.xlsm,.csv" />
+      </div>
+      <button class="btn ok" id="cameraBtn">📷 Camera</button>
+      <button class="btn secondary" id="prevPageBtn">◀</button>
+      <button class="btn secondary" id="nextPageBtn">▶</button>
+      <span id="pageLabel" style="font-size:12px; color:var(--muted); padding:0 6px;"></span>
+      <span style="flex:1;"></span>
+      <button class="btn ai-big" id="aiAutoScanBtn">🤖 AI AUTO-SCAN</button>
+    </div>
+    <div class="toolbar">
+      <button class="btn desc small" id="addDescBtn">+ Description</button>
+      <button class="btn qty small" id="addQtyBtn">+ Qty ×12</button>
+      <button class="btn cost small" id="addCostBtn">+ Cost ÷12</button>
+      <button class="btn ok small" id="createTableBtn">✅ Create Table</button>
+      <button class="btn secondary small" id="clearSelBtn">Clear Sel</button>
+      <button class="btn danger small" id="clearColsBtn">Clear All</button>
+    </div>
+    <div id="previewWrap">
+      <div id="canvasContainer">
+        <canvas id="previewCanvas"></canvas>
+        <div id="aiOverlay">
+          <div class="spinner"></div>
+          <div id="aiOverlayText">AI is analysing your invoice…</div>
+          <div class="ai-step" id="aiOverlayStep"></div>
+        </div>
+      </div>
+      <aside id="columnPanel">
+        <div class="help">
+          <strong>🤖 Recommended: AI Auto-Scan</strong><br>
+          Click <b>AI AUTO-SCAN</b> → the AI finds Description, Qty & Cost columns and extracts every row.<br><br>
+          <strong>Manual fallback</strong><br>
+          • Tap <b>+ Description / + Qty / + Cost</b> → box appears<br>
+          • Drag the 8 handles to resize, drag inside to move<br>
+          • Or drag on empty image to draw
+        </div>
+        <div id="columnList"></div>
+      </aside>
+    </div>
+    <div id="selectionInfo">Click 🤖 AI AUTO-SCAN for automatic detection, or draw rectangles manually.</div>
+  </section>
+
+  <section class="tab" id="tab-table">
+    <div class="table-toolbar">
+      <button class="btn secondary small" id="addRowBtn">+ Row</button>
+      <button class="btn danger small" id="delRowsBtn">Delete Sel</button>
+      <button class="btn danger small" id="clearRowsBtn">Clear Rows</button>
+    </div>
+    <div class="table-toolbar" id="tableToolbar2">
+      <button class="btn ok small" id="matchDbBtn">🔍 Match Products (Python Rules)</button>
+      <div class="supplier-wrap">
+        <label style="font-size:12px;">Supplier <small>(optional boost)</small>:</label>
+        <input id="supplierInput" placeholder="(none — product-only)" autocomplete="off" list="supplierList" />
+        <datalist id="supplierList"></datalist>
+        <button class="btn secondary small" id="clearSupplierBtn">Clear</button>
+        <button class="btn warn small" id="detectSupplierBtn">Detect</button>
+      </div>
+    </div>
+    <div class="table-toolbar" id="tableToolbarAI">
+      <span style="font-weight:600; font-size:12px;">🤖 AI:</span>
+      <button class="btn ai small" id="aiVerifyBtn">AI Verify Matches</button>
+      <button class="btn ai small" id="aiExplainBtn">AI Explain Row 1</button>
+      <button class="btn secondary small" id="aiConfigBtn">⚙ Info</button>
+      <span id="aiStatus" style="font-size:11px;color:var(--muted);">AI: Puter.js (No Key)</span>
+    </div>
+    <div class="table-toolbar" id="tableToolbar3">
+      <span style="font-weight:600; font-size:12px;">📤 Share / Download:</span>
+      <button class="btn ok small" id="shareMatchedXlsx">MATCHED → Excel</button>
+      <button class="btn ok small" id="shareMatchedCsv">MATCHED → CSV</button>
+      <button class="btn warn small" id="shareNewXlsx">NEW → Excel</button>
+      <button class="btn warn small" id="shareNewCsv">NEW → CSV</button>
+      <button class="btn small" id="shareBothXlsx">BOTH → Excel</button>
+      <button class="btn small" id="shareBothCsv">BOTH → CSV</button>
+    </div>
+    <div class="table-toolbar" id="tableToolbar4">
+      <span style="flex:1;"></span>
+      <label style="font-size:12px;"><input type="checkbox" id="includeQty" checked /> Include Qty</label>
+      <label style="font-size:12px;"><input type="checkbox" id="includeCost" checked /> Include Cost</label>
+    </div>
+    <div id="tableScroll">
+      <table class="data-table" id="dataTable">
+        <thead><tr id="tableHead"></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-chat">
+    <div class="chat-top">
+      <div>
+        <strong>🤖 RK AI Assistant</strong>
+        <div class="chat-subtitle">General AI chat. Switch to Invoice Extraction for structured rows. Powered by Puter.js (User-Pays model).</div>
+      </div>
+      <div class="chat-top-tools">
+        <select id="chatModeSelect" aria-label="Chat mode">
+          <option value="general">General Assistant</option>
+          <option value="invoice">Invoice Extraction</option>
+        </select>
+        <button class="btn secondary small" id="chatSettingsBtn">⚙ Info</button>
+        <button class="btn danger small" id="chatClearBtn">＋ New Chat</button>
+      </div>
+    </div>
+    <div class="chat-layout">
+      <div id="chatMessages" aria-live="polite">
+        <div class="chat-bubble assistant"><div class="chat-role">RK AI Assistant</div><div class="chat-body">Hello! I'm your AI assistant powered by Puter.js. No API key needed—just sign in when prompted. Ask me questions or attach an image. For invoice extraction, switch to **Invoice Extraction** mode.</div></div>
+      </div>
+      <div id="chatResultsWrap" hidden>
+        <div id="chatResultsTitle">Extracted invoice rows — no results yet</div>
+        <div style="overflow:auto;"><table id="chatResultsTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="chat-compose">
+        <textarea id="chatPrompt" placeholder="Message RK AI Assistant… (Enter to send, Shift+Enter for a new line)"></textarea>
+        <div class="chat-compose-row">
+          <label class="btn secondary" for="chatFiles">📎 Attach image(s)</label>
+          <input id="chatFiles" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple />
+          <span id="chatFileNames">No files selected</span>
+          <span id="chatState">Ready (Puter.js)</span>
+        </div>
+        <div class="chat-compose-row">
+          <button class="btn ai" id="chatSendBtn">➤ Send</button>
+          <button class="btn ok" id="chatExcelBtn" disabled>⬇ Generate Invoice Excel</button>
+          <button class="btn secondary" id="chatToTableBtn" disabled>Use in Product Matching</button>
+          <button class="btn warn" id="chatDownloadAllBtn" disabled>📥 Download All AI Tables</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-debug">
+    <div class="toolbar">
+      <button class="btn secondary small" id="refreshOcrBtn">Refresh OCR</button>
+      <button class="btn warn small" id="diagBtn">Run Diagnostic</button>
+      <button class="btn secondary small" id="testMatchBtn">Test Match</button>
+      <button class="btn ai small" id="testAiBtn">Test AI</button>
+    </div>
+    <div id="debugTab">
+      <h4 style="margin:4px 0;">OCR Text</h4>
+      <pre id="ocrOutput">(no data)</pre>
+      <h4 style="margin:16px 0 4px;">Detection Log</h4>
+      <pre id="logOutput">(no data)</pre>
+      <h4 style="margin:16px 0 4px;">AI Log</h4>
+      <pre id="aiLog">(no data)</pre>
+    </div>
+  </section>
+</main>
+
+<div id="cameraModal">
+  <video id="cameraVideo" autoplay playsinline></video>
+  <div id="cameraControls">
+    <button class="close" id="closeCameraBtn">✕</button>
+    <button id="snapBtn">SNAP</button>
+    <button class="close" id="switchCameraBtn" style="background:#0b4f6c; color:#fff;">⟲</button>
+  </div>
+</div>
+
+<div id="statusBar">
+  <span id="statusText">Ready. Open a file or use Camera, then click 🤖 AI AUTO-SCAN.</span>
+  <div class="progress" id="progressBar"><div></div></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   CONFIG (Supabase Only - Puter.js handles AI)
+   ========================================================= */
+const SUPABASE_URL = "https://ibmwrbpucbbflnxopfwm.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlibXdyYnB1Y2JiZmxueG9wZndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NjczNjgsImV4cCI6MjA5ODI0MzM2OH0.hAf6u1Vb8Z45jC2kCLHI3pZvDk2GMNBWY6mfwcCbUts";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* =========================================================
+   STATE
+   ========================================================= */
+const state = {
+  currentFileKind: "", pageImages: [], pageIndex: 0,
+  manualColumns: [],
+  headers: [], rows: [],
+  currentSupplierId: null, detectedSupplierId: null,
+  suppliers: [], supplierById: {},
+  ocrCache: new Map(),
+  selectedRows: new Set(),
+  lastMatchIndex: null,
+  aiLog: [],
+  productNorms: new Set(),
+};
+
+const $ = (id) => document.getElementById(id);
+const canvas = $("previewCanvas");
+const ctx = canvas.getContext("2d");
+const statusText = $("statusText");
+const progressBar = $("progressBar");
+const progressInner = progressBar.querySelector("div");
+const fileInfo = $("fileInfo");
+const pageLabel = $("pageLabel");
+const columnList = $("columnList");
+const selectionInfo = $("selectionInfo");
+const tableHead = $("tableHead");
+const tableBody = $("tableBody");
+const supplierInput = $("supplierInput");
+const supplierList = $("supplierList");
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+function toast(msg, ms = 2500) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove("show"), ms);
+}
+function setStatus(msg) { statusText.textContent = msg; }
+function showProgress(show) {
+  progressBar.classList.toggle("show", show);
+  if (!show) progressInner.style.width = "0%";
+}
+function setProgress(pct) { progressInner.style.width = Math.min(100, Math.max(0, pct)) + "%"; }
+function normAlnum(s) { return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
+function normCode(s) { return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
+function cleanText(s) {
+  return String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function aiLog(msg) {
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  state.aiLog.unshift(line);
+  state.aiLog = state.aiLog.slice(0, 100);
+  $("aiLog").textContent = state.aiLog.join("\n");
+}
+
+/* =========================================================
+   TABS
+   ========================================================= */
+document.querySelectorAll("nav.tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+    btn.classList.add("active");
+    $("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "preview") requestAnimationFrame(renderPreviewCanvas);
+  });
+});
+function switchTab(name) {
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("section.tab").forEach(s => s.classList.toggle("active", s.id === "tab-" + name));
+  if (name === "preview") requestAnimationFrame(renderPreviewCanvas);
+}
+
+/* =========================================================
+   COLUMN DETECTION / NORMALIZATION
+   ========================================================= */
+const HEADER_KEYWORDS = new Set([
+  "no","sno","sr","srno","sl","slno","item","items","itemcode","itemno",
+  "code","sku","stockcode","partno","model","modelno","modelnumber",
+  "description","details","product","productname","particulars","qty",
+  "quantity","qnty","pcs","pieces","unit","units","uom","price","rate",
+  "unitprice","sellingprice","cost","costprice","amount","value",
+  "netamount","grossamount","subtotal","subtot","total","tax","vat",
+  "vatamount","discount","disc","balance","paid","due","weight","size",
+  "colour","color",
+]);
+const NON_CODE_TOKENS = new Set([
+  "pcs","pc","nos","no","qty","quantity","unit","units","kg","g","ltr","l",
+  "ml","box","set","pkt","pack","each","ea","total","amount","price","rate",
+  "discount","vat","tax","net","gross","subtotal",
+]);
+
+function findDescriptionColumnIndex(headers) {
+  const low = headers.map(h => String(h).trim().toLowerCase());
+  let i = low.indexOf("description");
+  if (i >= 0) return i;
+  i = low.findIndex(h => h.includes("description") && !h.includes("final"));
+  if (i >= 0) return i;
+  i = low.findIndex(h => /productname|product name|product_name|prod name|prod\. name|prodname|item name|itemname|item_name|particulars/.test(h));
+  if (i >= 0) return i;
+  i = low.findIndex(h => /details|product|item/.test(h));
+  return i >= 0 ? i : null;
+}
+function findExactHeader(headers, name) {
+  const t = String(name).trim().toLowerCase();
+  return headers.findIndex(h => String(h).trim().toLowerCase() === t);
+}
+function findQtyColumnIndex(headers) {
+  const low = headers.map(h => String(h).trim().toLowerCase());
+  let i = low.findIndex(h => ["qty","quantity","qnty","pcs","pieces"].includes(h));
+  if (i >= 0) return i;
+  i = low.findIndex(h => /qty|quantity|qnty/.test(h));
+  return i >= 0 ? i : null;
+}
+function findCostColumnIndex(headers) {
+  const low = headers.map(h => String(h).trim().toLowerCase());
+  let i = low.findIndex(h => ["cost","costprice","unitcost","unit cost","buy price"].includes(h));
+  if (i >= 0) return i;
+  i = low.findIndex(h => /cost|buyprice|buy price/.test(h));
+  return i >= 0 ? i : null;
+}
+
+/* =========================================================
+   MATCHING ENGINE
+   ========================================================= */
+function extractCodeCandidates(descText) {
+  if (!descText) return [];
+  let text = String(descText);
+  text = text.replace(/(\d)\s+([A-Za-z0-9])(?![A-Za-z0-9])/g, "$1$2");
+  text = text.replace(/([A-Za-z])\s+(\d)/g, "$1$2");
+  text = text.replace(/(\d)\s+([A-Za-z])/g, "$1$2");
+
+  const tokenRe = /[A-Za-z0-9][A-Za-z0-9\-_/]*[A-Za-z0-9]|[A-Za-z0-9]/g;
+  const seen = new Set();
+  const out = [];
+  let match;
+
+  while ((match = tokenRe.exec(text)) !== null) {
+    const raw = match[0].replace(/^[-_/]+|[-_/]+$/g, "");
+    if (!raw || raw.length < 4) continue;
+
+    const digitCount = (raw.match(/\d/g) || []).length;
+    const letterCount = (raw.match(/[A-Za-z]/g) || []).length;
+
+    const shortAlnumOk =
+      /^[A-Za-z]{1,4}\d{2,}$/.test(raw) ||
+      /^\d{2,}[A-Za-z]{1,4}$/.test(raw);
+
+    if (!shortAlnumOk) {
+      if (digitCount < 3) continue;
+      if (letterCount === 0 && digitCount < 4) continue;
+    }
+
+    if (/^\d+[.,]\d+$/.test(raw)) continue;
+
+    const key = normCode(raw);
+    if (!key || seen.has(key)) continue;
+    if (NON_CODE_TOKENS.has(key.toLowerCase())) continue;
+
+    seen.add(key);
+    out.push(raw);
+  }
+  return out;
+}
+
+function scoreMatch(codeNorm, dbNorm) {
+  if (!codeNorm || !dbNorm) return 0;
+  if (codeNorm === dbNorm) return 1000;
+  if (dbNorm.endsWith(codeNorm)) {
+    const ratio = codeNorm.length / dbNorm.length;
+    return Math.floor(700 + ratio * 200);
+  }
+  if (dbNorm.startsWith(codeNorm)) return 450;
+  if (dbNorm.includes(codeNorm)) {
+    if (codeNorm.length >= 6) return 200;
+    if (codeNorm.length >= 5) return 120;
+  }
+  if (codeNorm.length > dbNorm.length && codeNorm.includes(dbNorm)) {
+    if (dbNorm.length >= 6) return 80;
+  }
+  return 0;
+}
+
+function scoreMatchWithSupplier(codeNorm, dbNorm, dbSupplier, pinnedSupplier) {
+  let base = scoreMatch(codeNorm, dbNorm);
+  if (base === 0) return 0;
+  if (pinnedSupplier !== null && pinnedSupplier !== undefined) {
+    if (Number(dbSupplier || 0) === Number(pinnedSupplier)) {
+      base += 500;
+    } else if (codeNorm.length <= 6) {
+      base -= 300;
+    } else {
+      base -= 100;
+    }
+  }
+  return Math.max(0, base);
+}
+
+function buildProductIndex(products) {
+  const exact = new Map();
+  const bySuffix = new Map();
+  const bySupplier = new Map();
+  for (const product of products) {
+    const norm = product.norm;
+    const supplierId = Number(product.supplier_id || 0);
+    const description = product.short_desc;
+    if (!norm || norm.length < 3 || !description) continue;
+    if (!exact.has(norm)) exact.set(norm, []);
+    exact.get(norm).push({ desc: description, supplier: supplierId });
+    const suffix = norm.slice(-6);
+    if (!bySuffix.has(suffix)) bySuffix.set(suffix, []);
+    bySuffix.get(suffix).push({ norm, desc: description, supplier: supplierId });
+    if (!bySupplier.has(supplierId)) bySupplier.set(supplierId, []);
+    bySupplier.get(supplierId).push({ norm, desc: description, supplier: supplierId });
+  }
+  return { exact, bySuffix, bySupplier };
+}
+
+function findBestMatch(code, index, pinnedSupplier) {
+  const codeNorm = normCode(code);
+  if (!codeNorm || codeNorm.length < 3) {
+    return { desc: null, score: 0, supplier: null };
+  }
+  if (index.exact.has(codeNorm)) {
+    const exactCandidates = index.exact.get(codeNorm);
+    if (pinnedSupplier !== null && pinnedSupplier !== undefined) {
+      const preferred = exactCandidates.find(
+        item => Number(item.supplier || 0) === Number(pinnedSupplier)
+      );
+      if (preferred) {
+        return { desc: preferred.desc, score: 1500, supplier: preferred.supplier };
+      }
+    }
+    const first = exactCandidates[0];
+    return { desc: first.desc, score: 1000, supplier: first.supplier };
+  }
+
+  let candidates = (index.bySuffix.get(codeNorm.slice(-6)) || []).slice();
+  if (!candidates.length) {
+    let pool = [];
+    if (pinnedSupplier !== null && pinnedSupplier !== undefined) {
+      pool = index.bySupplier.get(Number(pinnedSupplier)) || [];
+    } else {
+      for (const bucket of index.bySupplier.values()) pool.push(...bucket);
+    }
+    if (codeNorm.length >= 6) {
+      candidates = pool.filter(item =>
+        item.norm.endsWith(codeNorm) || item.norm.includes(codeNorm)
+      );
+    } else {
+      candidates = pool.filter(item => item.norm.endsWith(codeNorm));
+    }
+  }
+  if (!candidates.length) {
+    return { desc: null, score: 0, supplier: null };
+  }
+  let best = null;
+  let bestScore = 0;
+  for (const candidate of candidates) {
+    const score = scoreMatchWithSupplier(
+      codeNorm, candidate.norm, candidate.supplier, pinnedSupplier
+    );
+    if (score > bestScore) { bestScore = score; best = candidate; }
+  }
+  if (!best || bestScore < 200) {
+    return { desc: null, score: 0, supplier: null };
+  }
+  return { desc: best.desc, score: bestScore, supplier: best.supplier };
+}
+
+function transformNumeric(value, transform) {
+  const text = cleanText(value);
+  if (!text) return "";
+  if (!transform) return text;
+  let num = text.replace(/,/g, "").trim();
+  if (num.startsWith("/")) num = num.slice(1).trim();
+  num = num.replace(/\s+/g, "");
+  const n = parseFloat(num);
+  if (!isFinite(n)) return text;
+  let r = n;
+  if (transform === "div12") r = n / 12.0;
+  else if (transform === "mul12") r = n * 12.0;
+  if (Number.isInteger(r)) return String(r);
+  return r.toFixed(10).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/* =========================================================
+   FILE HANDLING
+   ========================================================= */
+$("fileInput").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  e.target.value = "";
+  await openFile(f);
+});
+
+async function openFile(file) {
+  resetForNewFile(file.name);
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  try {
+    showProgress(true);
+    setProgress(10);
+    if (ext === "xlsx" || ext === "xlsm" || ext === "csv") {
+      await handleSpreadsheet(file, ext);
+    } else {
+      await handleImageOrPdf(file, ext);
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Error: " + err.message, 5000);
+    setStatus("Load failed: " + err.message);
+  } finally {
+    showProgress(false);
+  }
+}
+
+function resetForNewFile(name) {
+  state.currentFileKind = "";
+  state.pageImages = []; state.pageIndex = 0;
+  state.manualColumns = [];
+  state.headers = []; state.rows = [];
+  state.selectedRows.clear();
+  state.currentSupplierId = null; state.detectedSupplierId = null;
+  state.ocrCache.clear();
+  state.lastMatchIndex = null;
+  fileInfo.textContent = name;
+  pageLabel.textContent = "";
+  supplierInput.value = "";
+  renderColumnList();
+  renderTable();
+  drawPreview();
+}
+
+async function handleSpreadsheet(file, ext) {
+  const buf = await file.arrayBuffer();
+  let headers = [], rows = [];
+  if (ext === "csv") {
+    const text = await file.text();
+    const parsed = parseCsv(text);
+    headers = parsed.headers; rows = parsed.rows;
+  } else {
+    const wb = XLSX.read(buf, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+    const parsed = pickHeaderRow(aoa.map(r => r.map(cleanText)));
+    headers = parsed.headers; rows = parsed.rows;
+  }
+  state.currentFileKind = ext === "csv" ? "csv" : "excel";
+  state.headers = headers; state.rows = rows; state.pageImages = [];
+  pageLabel.textContent = ext.toUpperCase() + " file";
+  renderTable();
+  setStatus(`Loaded ${headers.length} cols × ${rows.length} rows.`);
+  switchTab("table");
+  loadSuppliers().catch(() => {});
+}
+
+function pickHeaderRow(aoa) {
+  let hi = 0;
+  for (let i = 0; i < Math.min(10, aoa.length); i++) {
+    const r = aoa[i];
+    const nonNum = r.filter(c => c && !/^[\d\s.,%\-+/]+$/.test(c)).length;
+    if (nonNum >= 2) { hi = i; break; }
+  }
+  const rawHeaders = aoa[hi] || [];
+  const headers = rawHeaders.map((h, j) => cleanText(h) || `Column ${j+1}`);
+  const seen = {};
+  headers.forEach((h, i) => {
+    const k = h.toLowerCase();
+    seen[k] = (seen[k] || 0) + 1;
+    if (seen[k] > 1) headers[i] = `${h} ${seen[k]}`;
+  });
+  const width = headers.length;
+  const rows = [];
+  for (let i = hi + 1; i < aoa.length; i++) {
+    const r = aoa[i].slice(0, width);
+    while (r.length < width) r.push("");
+    if (r.some(c => c)) rows.push(r);
+  }
+  return { headers, rows };
+}
+
+function parseCsv(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const firstLine = text.split(/\r?\n/)[0] || "";
+  const counts = { ",": 0, ";": 0, "\t": 0, "|": 0 };
+  for (const ch of firstLine) if (ch in counts) counts[ch]++;
+  const delim = Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b, ",");
+  const rows = [];
+  let cur = [], field = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (ch === '"') inQ = false;
+      else field += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === delim) { cur.push(field); field = ""; }
+      else if (ch === "\n") { cur.push(field); rows.push(cur); cur = []; field = ""; }
+      else if (ch === "\r") { /* skip */ }
+      else field += ch;
+    }
+  }
+  if (field || cur.length) { cur.push(field); rows.push(cur); }
+  const nonEmpty = rows.filter(r => r.some(c => cleanText(c)));
+  if (!nonEmpty.length) return { headers: [], rows: [] };
+  const headers = nonEmpty[0].map((h, j) => cleanText(h) || `Column ${j+1}`);
+  const seen = {};
+  headers.forEach((h, i) => {
+    const k = h.toLowerCase();
+    seen[k] = (seen[k] || 0) + 1;
+    if (seen[k] > 1) headers[i] = `${h} ${seen[k]}`;
+  });
+  const width = headers.length;
+  const dataRows = [];
+  for (let i = 1; i < nonEmpty.length; i++) {
+    const r = nonEmpty[i].slice(0, width);
+    while (r.length < width) r.push("");
+    if (r.some(c => c)) dataRows.push(r);
+  }
+  return { headers, rows: dataRows };
+}
+
+async function handleImageOrPdf(file, ext) {
+  state.currentFileKind = "image";
+  setStatus("Loading pages...");
+  setProgress(20);
+  if (ext === "pdf") {
+    if (!window.pdfjsLib) {
+      await loadScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js");
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+    }
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      setStatus(`Rendering page ${i} / ${pdf.numPages}...`);
+      setProgress(20 + (i / pdf.numPages) * 50);
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.0 });
+      const c = document.createElement("canvas");
+      c.width = viewport.width; c.height = viewport.height;
+      await page.render({ canvasContext: c.getContext("2d"), viewport }).promise;
+      pages.push(c);
+    }
+    state.pageImages = pages;
+  } else {
+    const dataUrl = await readAsDataURL(file);
+    const img = await loadImage(dataUrl);
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    state.pageImages = [c];
+  }
+  state.pageIndex = 0;
+  pageLabel.textContent = `Page 1 / ${state.pageImages.length}`;
+  setProgress(75);
+  switchTab("preview");
+  requestAnimationFrame(() => { renderPreviewCanvas(); drawPreview(); });
+  setStatus('Ready. Click 🤖 AI AUTO-SCAN, or add rectangles manually.');
+  runOcrOnCurrentPage().catch(() => {});
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+function readAsDataURL(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = src;
+  });
+}
+
+/* =========================================================
+   CAMERA
+   ========================================================= */
+let cameraStream = null;
+let cameraFacing = "environment";
+
+$("cameraBtn").addEventListener("click", openCamera);
+$("closeCameraBtn").addEventListener("click", closeCamera);
+$("switchCameraBtn").addEventListener("click", async () => {
+  cameraFacing = cameraFacing === "environment" ? "user" : "environment";
+  closeCamera();
+  await openCamera();
+});
+$("snapBtn").addEventListener("click", snapPhoto);
+
+async function openCamera() {
+  try {
+    $("cameraModal").classList.add("show");
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: cameraFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    $("cameraVideo").srcObject = cameraStream;
+  } catch (err) {
+    toast("Camera error: " + err.message, 5000);
+    $("cameraModal").classList.remove("show");
+  }
+}
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  $("cameraModal").classList.remove("show");
+}
+async function snapPhoto() {
+  const video = $("cameraVideo");
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  closeCamera();
+  const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.92));
+  const file = new File([blob], `scan_${Date.now()}.jpg`, { type: "image/jpeg" });
+  await openFile(file);
+}
+
+/* =========================================================
+   PREVIEW CANVAS + ADJUSTABLE RECTANGLES
+   ========================================================= */
+let previewScale = 1;
+let drag = null;
+
+function renderPreviewCanvas() {
+  if (!state.pageImages.length) {
+    canvas.width = 1; canvas.height = 1;
+    ctx.clearRect(0,0,1,1);
+    return;
+  }
+  const src = state.pageImages[state.pageIndex];
+  const container = $("canvasContainer");
+  const maxW = container.clientWidth - 20;
+  const maxH = container.clientHeight - 20;
+  const s = Math.min(maxW / src.width, maxH / src.height, 1);
+  previewScale = s;
+  canvas.width = Math.floor(src.width * s);
+  canvas.height = Math.floor(src.height * s);
+  drawPreview();
+}
+
+const HANDLE = 10;
+
+function drawPreview() {
+  if (!state.pageImages.length) { ctx.clearRect(0,0,canvas.width, canvas.height); return; }
+  const src = state.pageImages[state.pageIndex];
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+
+  state.manualColumns.forEach((col, i) => {
+    if (col.page_index !== state.pageIndex) return;
+    let color = "#0b4f6c";
+    if (col.sel_kind === "cost") color = "#b35900";
+    else if (col.sel_kind === "qty") color = "#7b2cbf";
+    else if (col.sel_kind === "ai") color = "#6d28d9";
+
+    const sx = col.x * previewScale;
+    const sy = col.y * previewScale;
+    const sw = col.w * previewScale;
+    const sh = col.h * previewScale;
+
+    ctx.fillStyle = color + "22";
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = col.sel_kind === "ai" ? 3 : 2;
+    if (col.sel_kind === "ai") ctx.setLineDash([6, 4]);
+    ctx.strokeRect(sx, sy, sw, sh);
+    ctx.setLineDash([]);
+
+    const handles = [
+      [sx, sy], [sx + sw/2, sy], [sx + sw, sy],
+      [sx, sy + sh/2], [sx + sw, sy + sh/2],
+      [sx, sy + sh], [sx + sw/2, sy + sh], [sx + sw, sy + sh],
+    ];
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    for (const [hx, hy] of handles) {
+      ctx.beginPath();
+      ctx.rect(hx - HANDLE/2, hy - HANDLE/2, HANDLE, HANDLE);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    const label = `C${i+1}: ${col.name}`;
+    ctx.font = "bold 12px sans-serif";
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(255,255,255,.95)";
+    ctx.fillRect(sx + 4, sy + 4, tw + 10, 20);
+    ctx.fillStyle = color;
+    ctx.fillText(label, sx + 9, sy + 19);
+  });
+}
+
+function canvasToImageX(clientX) {
+  const r = canvas.getBoundingClientRect();
+  return clamp((clientX - r.left) / previewScale, 0, state.pageImages[state.pageIndex].width);
+}
+function canvasToImageY(clientY) {
+  const r = canvas.getBoundingClientRect();
+  return clamp((clientY - r.top) / previewScale, 0, state.pageImages[state.pageIndex].height);
+}
+
+function addColumn(kind) {
+  if (state.currentFileKind !== "image") { toast("Rectangles work only for image/PDF scans."); return; }
+  if (!state.pageImages.length) { toast("Load an image first."); return; }
+  const srcW = state.pageImages[state.pageIndex].width;
+  const srcH = state.pageImages[state.pageIndex].height;
+  const labels = { desc: "Description", qty: "Qty (×12)", cost: "Cost (÷12)" };
+  const defaults = {
+    desc: { x: 0.10, y: 0.20, w: 0.50, h: 0.60 },
+    qty:  { x: 0.82, y: 0.20, w: 0.10, h: 0.60 },
+    cost: { x: 0.68, y: 0.20, w: 0.13, h: 0.60 },
+  };
+  const d = defaults[kind] || { x: 0.25, y: 0.25, w: 0.35, h: 0.5 };
+  const sameKind = state.manualColumns.filter(c => c.sel_kind === kind).length;
+  let x = d.x + sameKind * 0.03;
+  if (x + d.w > 1) x = 1 - d.w;
+
+  state.manualColumns.push({
+    name: labels[kind],
+    x: x * srcW,
+    y: d.y * srcH,
+    w: d.w * srcW,
+    h: d.h * srcH,
+    page_index: state.pageIndex,
+    sel_kind: kind,
+  });
+  state.manualColumns.sort((a, b) => a.x - b.x);
+  renderColumnList();
+  drawPreview();
+  setStatus(`Added ${labels[kind]} rectangle.`);
+}
+$("addDescBtn").addEventListener("click", () => addColumn("desc"));
+$("addQtyBtn").addEventListener("click", () => addColumn("qty"));
+$("addCostBtn").addEventListener("click", () => addColumn("cost"));
+
+function hitTest(clientX, clientY) {
+  const imgX = canvasToImageX(clientX);
+  const imgY = canvasToImageY(clientY);
+  const tol = HANDLE / previewScale;
+
+  for (let i = state.manualColumns.length - 1; i >= 0; i--) {
+    const c = state.manualColumns[i];
+    if (c.page_index !== state.pageIndex) continue;
+    const l = c.x, r = c.x + c.w, t = c.y, b = c.y + c.h;
+
+    if (Math.abs(imgX - l) <= tol && Math.abs(imgY - t) <= tol) return { col: c, idx: i, handle: "tl" };
+    if (Math.abs(imgX - r) <= tol && Math.abs(imgY - t) <= tol) return { col: c, idx: i, handle: "tr" };
+    if (Math.abs(imgX - l) <= tol && Math.abs(imgY - b) <= tol) return { col: c, idx: i, handle: "bl" };
+    if (Math.abs(imgX - r) <= tol && Math.abs(imgY - b) <= tol) return { col: c, idx: i, handle: "br" };
+    if (Math.abs(imgX - l) <= tol && imgY > t + tol && imgY < b - tol) return { col: c, idx: i, handle: "left" };
+    if (Math.abs(imgX - r) <= tol && imgY > t + tol && imgY < b - tol) return { col: c, idx: i, handle: "right" };
+    if (Math.abs(imgY - t) <= tol && imgX > l + tol && imgX < r - tol) return { col: c, idx: i, handle: "top" };
+    if (Math.abs(imgY - b) <= tol && imgX > l + tol && imgX < r - tol) return { col: c, idx: i, handle: "bottom" };
+    if (imgX >= l && imgX <= r && imgY >= t && imgY <= b) return { col: c, idx: i, handle: "move" };
+  }
+  return null;
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!state.pageImages.length) return;
+  canvas.setPointerCapture(e.pointerId);
+  const hit = hitTest(e.clientX, e.clientY);
+  if (hit) {
+    drag = {
+      mode: hit.handle === "move" ? "move" : "resize",
+      handle: hit.handle,
+      col: hit.col, idx: hit.idx,
+      startX: canvasToImageX(e.clientX),
+      startY: canvasToImageY(e.clientY),
+      orig: { x: hit.col.x, y: hit.col.y, w: hit.col.w, h: hit.col.h },
+    };
+  } else {
+    const sx = canvasToImageX(e.clientX);
+    const sy = canvasToImageY(e.clientY);
+    drag = {
+      mode: "draw",
+      startX: sx, startY: sy,
+      col: null, handle: null,
+      orig: { x: sx, y: sy, w: 0, h: 0 },
+    };
+  }
+  e.preventDefault();
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const imgX = canvasToImageX(e.clientX);
+  const imgY = canvasToImageY(e.clientY);
+
+  if (drag.mode === "draw") {
+    const left = Math.min(drag.startX, imgX);
+    const top = Math.min(drag.startY, imgY);
+    const w = Math.abs(imgX - drag.startX);
+    const h = Math.abs(imgY - drag.startY);
+    if (!drag.col) {
+      if (w < 5 / previewScale || h < 5 / previewScale) return;
+      const newCol = {
+        name: "Custom",
+        x: left, y: top, w, h,
+        page_index: state.pageIndex,
+        sel_kind: "desc",
+      };
+      state.manualColumns.push(newCol);
+      drag.col = newCol;
+      drag.idx = state.manualColumns.length - 1;
+    } else {
+      drag.col.x = left; drag.col.y = top;
+      drag.col.w = w; drag.col.h = h;
+    }
+    drawPreview();
+    return;
+  }
+
+  const c = drag.col;
+  const srcW = state.pageImages[state.pageIndex].width;
+  const srcH = state.pageImages[state.pageIndex].height;
+  const o = drag.orig;
+  const dx = imgX - drag.startX;
+  const dy = imgY - drag.startY;
+
+  if (drag.mode === "move") {
+    c.x = clamp(o.x + dx, 0, srcW - c.w);
+    c.y = clamp(o.y + dy, 0, srcH - c.h);
+  } else {
+    const minSize = 20 / previewScale;
+    switch (drag.handle) {
+      case "tl":
+        c.x = clamp(o.x + dx, 0, o.x + o.w - minSize);
+        c.y = clamp(o.y + dy, 0, o.y + o.h - minSize);
+        c.w = o.x + o.w - c.x;
+        c.h = o.y + o.h - c.y;
+        break;
+      case "tr":
+        c.y = clamp(o.y + dy, 0, o.y + o.h - minSize);
+        c.w = clamp(o.w + dx, minSize, srcW - o.x);
+        c.h = o.y + o.h - c.y;
+        break;
+      case "bl":
+        c.x = clamp(o.x + dx, 0, o.x + o.w - minSize);
+        c.w = o.x + o.w - c.x;
+        c.h = clamp(o.h + dy, minSize, srcH - o.y);
+        break;
+      case "br":
+        c.w = clamp(o.w + dx, minSize, srcW - o.x);
+        c.h = clamp(o.h + dy, minSize, srcH - o.y);
+        break;
+      case "left":
+        c.x = clamp(o.x + dx, 0, o.x + o.w - minSize);
+        c.w = o.x + o.w - c.x;
+        break;
+      case "right":
+        c.w = clamp(o.w + dx, minSize, srcW - o.x);
+        break;
+      case "top":
+        c.y = clamp(o.y + dy, 0, o.y + o.h - minSize);
+        c.h = o.y + o.h - c.y;
+        break;
+      case "bottom":
+        c.h = clamp(o.h + dy, minSize, srcH - o.y);
+        break;
+    }
+  }
+  drawPreview();
+});
+
+canvas.addEventListener("pointerup", (e) => {
+  if (!drag) return;
+  if (drag.mode === "draw" && !drag.col) {
+    const srcW = state.pageImages[state.pageIndex].width;
+    const srcH = state.pageImages[state.pageIndex].height;
+    const x0 = canvasToImageX(e.clientX);
+    const y0 = canvasToImageY(e.clientY);
+    const w = srcW * 0.25, h = srcH * 0.20;
+    state.manualColumns.push({
+      name: "Custom",
+      x: clamp(x0 - w/2, 0, srcW - w),
+      y: clamp(y0 - h/2, 0, srcH - h),
+      w, h,
+      page_index: state.pageIndex,
+      sel_kind: "desc",
+    });
+    renderColumnList();
+  }
+  drag = null;
+  renderColumnList();
+  drawPreview();
+});
+
+canvas.addEventListener("pointercancel", () => { drag = null; });
+
+window.addEventListener("resize", () => {
+  if (state.currentFileKind === "image") renderPreviewCanvas();
+});
+
+$("prevPageBtn").addEventListener("click", () => {
+  if (state.pageIndex > 0) {
+    state.pageIndex--;
+    pageLabel.textContent = `Page ${state.pageIndex+1} / ${state.pageImages.length}`;
+    renderPreviewCanvas();
+    runOcrOnCurrentPage().catch(() => {});
+  }
+});
+$("nextPageBtn").addEventListener("click", () => {
+  if (state.pageIndex < state.pageImages.length - 1) {
+    state.pageIndex++;
+    pageLabel.textContent = `Page ${state.pageIndex+1} / ${state.pageImages.length}`;
+    renderPreviewCanvas();
+    runOcrOnCurrentPage().catch(() => {});
+  }
+});
+
+$("clearSelBtn").addEventListener("click", () => {
+  state.manualColumns = [];
+  renderColumnList();
+  drawPreview();
+  setStatus("All rectangles cleared.");
+});
+$("clearColsBtn").addEventListener("click", () => {
+  if (!state.manualColumns.length) return;
+  if (!confirm("Remove all rectangle selections?")) return;
+  state.manualColumns = [];
+  renderColumnList();
+  drawPreview();
+  setStatus("All rectangles cleared.");
+});
+
+function renderColumnList() {
+  columnList.innerHTML = "";
+  state.manualColumns.forEach((col, i) => {
+    const div = document.createElement("div");
+    div.className = "col-item";
+    div.dataset.kind = col.sel_kind;
+    const kindLabel =
+      col.sel_kind === "qty" ? "QTY ×12" :
+      col.sel_kind === "cost" ? "COST ÷12" :
+      col.sel_kind === "ai" ? "AI DETECTED" : "DESC";
+    div.innerHTML = `
+      <div style="flex:1;">
+        <div><strong>${i+1}. ${escapeHtml(col.name)}</strong> <span class="meta">[${kindLabel}]</span></div>
+        <div class="meta">x=${Math.round(col.x)} y=${Math.round(col.y)} w=${Math.round(col.w)} h=${Math.round(col.h)}</div>
+      </div>
+      <button class="del" title="Remove">✕</button>
+    `;
+    div.querySelector(".del").addEventListener("click", () => {
+      state.manualColumns.splice(i, 1);
+      renderColumnList();
+      drawPreview();
+    });
+    columnList.appendChild(div);
+  });
+}
+
+/* =========================================================
+   OCR (Tesseract.js - Fallback)
+   ========================================================= */
+let tesseractWorker = null;
+async function getTesseractWorker() {
+  if (!tesseractWorker) {
+    setStatus("Initializing OCR engine (first time may take a few seconds)...");
+    tesseractWorker = await Tesseract.createWorker("eng", 1, {
+      logger: m => { if (m.status === "recognizing text") setProgress(m.progress * 100); },
+    });
+  }
+  return tesseractWorker;
+}
+
+async function ocrCanvas(canvasEl, psm = "6") {
+  const key = `${canvasEl.width}x${canvasEl.height}:${psm}`;
+  if (state.ocrCache.has(key)) return state.ocrCache.get(key);
+  const worker = await getTesseractWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: psm });
+  const { data } = await worker.recognize(canvasEl);
+  state.ocrCache.set(key, data);
+  return data;
+}
+
+async function runOcrOnCurrentPage() {
+  if (!state.pageImages.length) return;
+  try {
+    showProgress(true);
+    const data = await ocrCanvas(state.pageImages[state.pageIndex], "6");
+    $("ocrOutput").textContent = data.text || "(no text)";
+    $("logOutput").textContent = `Words: ${(data.words || []).length}`;
+  } catch (e) {
+    $("ocrOutput").textContent = "OCR error: " + e.message;
+  } finally {
+    showProgress(false);
+  }
+}
+$("refreshOcrBtn").addEventListener("click", runOcrOnCurrentPage);
+
+/* =========================================================
+   AI AUTO-SCAN (Using Puter.js)
+   ========================================================= */
+async function aiAutoScanCurrentPage() {
+  if (!state.pageImages.length) {
+    toast("Load an image or PDF first.");
+    return;
+  }
+  const overlay = $("aiOverlay");
+  const overlayText = $("aiOverlayText");
+  overlay.classList.add("show");
+  aiLog("=== AI AUTO-SCAN START (Puter.js) ===");
+
+  try {
+    const srcCanvas = state.pageImages[state.pageIndex];
+    const dataUrl = srcCanvas.toDataURL("image/jpeg", 0.85);
+
+    overlayText.textContent = "Calling Puter.js Vision AI...";
+    setProgress(30);
+
+    const response = await puter.ai.chat(
+      "Extract all invoice line items. Return JSON with rows array. Each row: description (full text), qty (as printed), cost (as printed). Do not convert units.",
+      dataUrl,
+      { model: "liquid/lfm3-vl-2b" }
+    );
+
+    const content = response.message?.content || response.toString();
+    aiLog("Puter.js Vision Response: " + content.slice(0, 500));
+
+    let parsed;
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+    } catch (e) {
+      aiLog("JSON parse failed, falling back to Tesseract heuristics.");
+      throw new Error("AI response was not valid JSON");
+    }
+
+    if (parsed.rows && parsed.rows.length) {
+      const headers = ["Description", "Qty ×12", "Cost ÷12"];
+      const rows = parsed.rows.map(r => {
+        const desc = cleanText(r.description || "");
+        const qty = transformNumeric(String(r.qty ?? ""), "mul12");
+        const cost = transformNumeric(String(r.cost ?? ""), "div12");
+        return [desc, qty, cost];
+      }).filter(r => r[0]);
+
+      if (rows.length) {
+        state.headers = headers;
+        state.rows = rows;
+        state.manualColumns = state.manualColumns.filter(c => c.sel_kind !== "ai");
+        renderTable();
+        switchTab("table");
+        setStatus(`✅ Puter.js extracted ${rows.length} rows.`);
+        toast(`✅ AI extracted ${rows.length} rows. Click "Match Products".`, 5000);
+        setProgress(100);
+        aiLog("=== AI AUTO-SCAN COMPLETE (Puter.js) ===");
+        return;
+      }
+    }
+
+    throw new Error("AI returned no rows");
+
+  } catch (e) {
+    aiLog("Puter.js AI failed: " + e.message + " — falling back to Tesseract OCR.");
+
+    try {
+      overlayText.textContent = "AI unavailable, using OCR fallback...";
+      const srcCanvas = state.pageImages[state.pageIndex];
+      const data = await ocrCanvas(srcCanvas, "6");
+      const allWords = wordsFromTesseractData(data);
+      if (!allWords.length) throw new Error("OCR found no readable text.");
+
+      const lines = groupWordsIntoLines(allWords);
+      const rows = lines
+        .map(ln => [cleanText(ln.text), "", ""])
+        .filter(r => r[0] && r[0].length >= 3);
+
+      if (!rows.length) throw new Error("No usable OCR rows.");
+
+      state.headers = ["Description", "Qty ×12", "Cost ÷12"];
+      state.rows = rows;
+      renderTable();
+      switchTab("table");
+      setStatus(`OCR fallback extracted ${rows.length} lines. Review and edit before matching.`);
+      toast(`⚠️ AI failed, but OCR extracted ${rows.length} lines. Please verify.`, 6000);
+
+    } catch (ocrErr) {
+      toast("AI and OCR both failed: " + ocrErr.message, 6000);
+      setStatus("AI and OCR both failed. Try manual rectangle selection.");
+    }
+  } finally {
+    overlay.classList.remove("show");
+    showProgress(false);
+  }
+}
+
+function wordsFromTesseractData(data, offsetX = 0, offsetY = 0) {
+  const words = [];
+  for (const w of (data.words || [])) {
+    if (!w.text || !w.text.trim()) continue;
+    const b = w.bbox;
+    const conf = w.confidence === undefined ? 90 : w.confidence;
+    if (conf < 10) continue;
+    words.push({
+      text: w.text.trim(),
+      x: b.x0 + offsetX, y: b.y0 + offsetY,
+      w: b.x1 - b.x0, h: b.y1 - b.y0,
+      cx: (b.x0 + b.x1) / 2 + offsetX,
+      cy: (b.y0 + b.y1) / 2 + offsetY,
+      conf,
+    });
+  }
+  return words;
+}
+
+function groupWordsIntoLines(words, yTolerance = 0.6) {
+  if (!words.length) return [];
+  const sorted = [...words].sort((a, b) => (a.cy - b.cy) || (a.x - b.x));
+  const lines = [];
+  for (const w of sorted) {
+    let placed = false;
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 3); i--) {
+      const line = lines[i];
+      const cyMed = median(line.words.map(z => z.cy));
+      const hMed = median(line.words.map(z => Math.max(6, z.h)));
+      if (Math.abs(w.cy - cyMed) <= Math.max(4, hMed * yTolerance)) {
+        line.words.push(w);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) lines.push({ words: [w] });
+  }
+  return lines.map(line => {
+    const ws = line.words.sort((a, b) => a.x - b.x);
+    return {
+      words: ws,
+      text: cleanText(ws.map(w => w.text).join(" ")),
+      x1: Math.min(...ws.map(w => w.x)),
+      x2: Math.max(...ws.map(w => w.x + w.w)),
+      y1: Math.min(...ws.map(w => w.y)),
+      y2: Math.max(...ws.map(w => w.y + w.h)),
+      cy: (Math.min(...ws.map(w => w.y)) + Math.max(...ws.map(w => w.y + w.h))) / 2,
+    };
+  }).sort((a, b) => (a.cy - b.cy) || (a.x1 - b.x1));
+}
+
+function parseModelJson(content) {
+  const raw = String(content || "").trim();
+  if (!raw) throw new Error("The AI returned an empty response.");
+  const candidates = [raw];
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) candidates.push(fenced[1].trim());
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first >= 0 && last > first) candidates.push(raw.slice(first, last + 1));
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch (_) {}
+  }
+  throw new Error("AI response was not valid JSON. Please retry or choose another vision model.");
+}
+
+/* =========================================================
+   MANUAL EXTRACT FROM RECTANGLES
+   ========================================================= */
+async function extractTableFromRects() {
+  const cols = state.manualColumns
+    .filter(c => c.page_index === state.pageIndex && c.sel_kind !== "ai")
+    .sort((a, b) => a.x - b.x);
+  if (!cols.length) throw new Error("Add at least one rectangle first.");
+
+  const srcCanvas = state.pageImages[state.pageIndex];
+  const colLines = [];
+  const headers = [];
+
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
+    setStatus(`OCR rectangle ${i+1} / ${cols.length}...`);
+    setProgress((i / cols.length) * 100);
+    const x = Math.max(0, Math.floor(col.x));
+    const y = Math.max(0, Math.floor(col.y));
+    const w = Math.max(1, Math.floor(col.w));
+    const h = Math.max(1, Math.floor(col.h));
+    const crop = document.createElement("canvas");
+    crop.width = w; crop.height = h;
+    crop.getContext("2d").drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+    const data = await ocrCanvas(crop, "6");
+    const words = wordsFromTesseractData(data, x, y);
+    headers.push(col.name);
+    colLines.push(groupWordsIntoLines(words.filter(w => w.cy >= y && w.cy <= y + h)));
+  }
+
+  const firstLines = colLines[0];
+  if (!firstLines.length) throw new Error("Rectangle 1 has no OCR data.");
+  const rowAnchors = firstLines.map(l => ({ center: l.cy, parts: [l.text] }));
+
+  const rows = rowAnchors.map(() => new Array(cols.length).fill(""));
+  rowAnchors.forEach((a, ri) => { rows[ri][0] = cleanText(a.parts.join(" ")); });
+
+  for (let ci = 1; ci < cols.length; ci++) {
+    for (const line of colLines[ci]) {
+      if (!line.text) continue;
+      let best = 0, bestD = Infinity;
+      rowAnchors.forEach((a, ri) => {
+        const d = Math.abs(a.center - line.cy);
+        if (d < bestD) { bestD = d; best = ri; }
+      });
+      if (bestD <= 25) {
+        rows[best][ci] = cleanText((rows[best][ci] + " " + line.text).trim());
+      }
+    }
+  }
+
+  let finalRows = rows.filter(r => r.some(c => cleanText(c)));
+  for (let ci = 0; ci < cols.length; ci++) {
+    const kind = cols[ci].sel_kind;
+    let t = null;
+    if (kind === "cost") t = "div12";
+    else if (kind === "qty") t = "mul12";
+    if (!t) continue;
+    for (const r of finalRows) {
+      if (ci < r.length) r[ci] = transformNumeric(r[ci], t);
+    }
+  }
+  return { headers, rows: finalRows };
+}
+
+$("createTableBtn").addEventListener("click", async () => {
+  try {
+    showProgress(true);
+    if (state.currentFileKind === "image") {
+      const { headers, rows } = await extractTableFromRects();
+      state.headers = headers; state.rows = rows;
+      setStatus(`Table created: ${headers.length} columns, ${rows.length} rows.`);
+    } else if (state.currentFileKind === "excel" || state.currentFileKind === "csv") {
+      const h = [...state.headers];
+      const r = state.rows.map(row => [...row]);
+      const qi = findQtyColumnIndex(h);
+      const ci = findCostColumnIndex(h);
+      if (qi !== null) r.forEach(row => row[qi] = transformNumeric(row[qi], "mul12"));
+      if (ci !== null) r.forEach(row => row[ci] = transformNumeric(row[ci], "div12"));
+      state.headers = h; state.rows = r;
+      setStatus(`Table reloaded: Qty(×12)=${qi}, Cost(÷12)=${ci}.`);
+    }
+    renderTable();
+    switchTab("table");
+  } catch (err) {
+    toast(err.message, 5000);
+  } finally {
+    showProgress(false);
+  }
+});
+
+/* =========================================================
+   TABLE RENDER
+   ========================================================= */
+function renderTable() {
+  tableHead.innerHTML = "";
+  tableBody.innerHTML = "";
+  if (!state.headers.length) {
+    tableHead.innerHTML = '<th style="padding:20px;text-align:center;color:var(--muted);">No table yet. Scan or load a file first.</th>';
+    return;
+  }
+  state.headers.forEach((h, i) => {
+    const th = document.createElement("th");
+    th.textContent = h; th.dataset.col = i;
+    tableHead.appendChild(th);
+  });
+  state.rows.forEach((row, ri) => {
+    const tr = document.createElement("tr");
+    tr.dataset.row = ri;
+    row.forEach((cell, ci) => {
+      const td = document.createElement("td");
+      td.contentEditable = "true";
+      td.textContent = cell;
+      td.dataset.col = ci;
+      if (state.headers[ci] === "Status") {
+        const val = String(cell || "").toUpperCase();
+        if (val) td.classList.add("status-" + val);
+      }
+      if (state.headers[ci] === "Remarks" && String(cell) === "OLD") {
+        td.classList.add("remark-OLD");
+      }
+      td.addEventListener("input", () => { state.rows[ri][ci] = td.textContent; });
+      tr.appendChild(td);
+    });
+    tr.addEventListener("click", (e) => {
+      if (e.target.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (state.selectedRows.has(ri)) state.selectedRows.delete(ri);
+        else state.selectedRows.add(ri);
+      } else {
+        state.selectedRows.clear();
+        state.selectedRows.add(ri);
+      }
+      updateRowSelectionVisual();
+    });
+    tableBody.appendChild(tr);
+  });
+  updateRowSelectionVisual();
+}
+function updateRowSelectionVisual() {
+  [...tableBody.children].forEach((tr, ri) => {
+    tr.classList.toggle("row-selected", state.selectedRows.has(ri));
+  });
+}
+
+$("addRowBtn").addEventListener("click", () => {
+  if (!state.headers.length) return toast("Create a table first.");
+  state.rows.push(new Array(state.headers.length).fill(""));
+  renderTable();
+});
+$("delRowsBtn").addEventListener("click", () => {
+  if (!state.selectedRows.size) return toast("Select rows first.");
+  const sorted = [...state.selectedRows].sort((a, b) => b - a);
+  sorted.forEach(i => state.rows.splice(i, 1));
+  state.selectedRows.clear();
+  renderTable();
+});
+$("clearRowsBtn").addEventListener("click", () => {
+  if (!state.rows.length) return;
+  if (!confirm("Clear all table rows?")) return;
+  state.rows = [];
+  state.selectedRows.clear();
+  renderTable();
+});
+
+/* =========================================================
+   SUPPLIERS
+   ========================================================= */
+async function loadSuppliers(force = false) {
+  if (!force && state.suppliers.length) return state.suppliers;
+  try {
+    const { data, error } = await db.from("suppliers").select("supplier_id, supplier_name");
+    if (error) throw error;
+    state.suppliers = (data || []).map(s => ({
+      id: Number(s.supplier_id),
+      name: cleanText(s.supplier_name),
+    })).filter(s => s.name);
+    state.supplierById = {};
+    state.suppliers.forEach(s => { state.supplierById[s.id] = s; });
+    supplierList.innerHTML = "";
+    state.suppliers.slice(0, 500).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = `${s.id} - ${s.name}`;
+      supplierList.appendChild(opt);
+    });
+    return state.suppliers;
+  } catch (e) {
+    console.error("loadSuppliers", e);
+    return [];
+  }
+}
+
+supplierInput.addEventListener("change", () => {
+  const val = supplierInput.value.trim();
+  if (!val) { state.currentSupplierId = null; return; }
+  const m = val.match(/^(\d+)/);
+  if (m) {
+    state.currentSupplierId = parseInt(m[1], 10);
+    const s = state.supplierById[state.currentSupplierId];
+    setStatus(`Supplier boost: ${s ? s.name : state.currentSupplierId}.`);
+  } else {
+    state.currentSupplierId = null;
+  }
+});
+$("clearSupplierBtn").addEventListener("click", () => {
+  supplierInput.value = "";
+  state.currentSupplierId = null;
+  setStatus("Supplier boost cleared.");
+});
+$("detectSupplierBtn").addEventListener("click", detectSupplierForCurrent);
+
+async function detectSupplierForCurrent() {
+  if (!state.pageImages.length) return toast("Load an image first.");
+  try {
+    showProgress(true);
+    const src = state.pageImages[state.pageIndex];
+    const cropH = Math.floor(src.height * 0.28);
+    const c = document.createElement("canvas");
+    c.width = src.width; c.height = cropH;
+    c.getContext("2d").drawImage(src, 0, 0, src.width, cropH, 0, 0, src.width, cropH);
+    const data = await ocrCanvas(c, "6");
+    const text = data.text || "";
+    const normText = normAlnum(text);
+    const suppliers = await loadSuppliers();
+    let best = { id: null, name: null, score: 0 };
+    for (const s of suppliers) {
+      const n = normAlnum(s.name);
+      if (!n || n.length < 4) continue;
+      if (normText.includes(n)) {
+        const score = 900 + Math.min(n.length, 100);
+        if (score > best.score) best = { id: s.id, name: s.name, score };
+        continue;
+      }
+      const dbWords = s.name.toUpperCase().split(/\s+/).filter(w => w.length >= 3);
+      const ocrWords = new Set(text.toUpperCase().match(/[A-Z0-9]+/g) || []);
+      if (!dbWords.length) continue;
+      const hits = dbWords.filter(w => ocrWords.has(w)).length;
+      const ratio = hits / dbWords.length;
+      if (ratio >= 0.6) {
+        const score = Math.floor(ratio * 700) + hits * 20;
+        if (score > best.score) best = { id: s.id, name: s.name, score };
+      }
+    }
+    if (best.id != null) {
+      state.detectedSupplierId = best.id;
+      state.currentSupplierId = best.id;
+      supplierInput.value = `${best.id} - ${best.name}`;
+      setStatus(`Detected supplier: ${best.id} - ${best.name}.`);
+    } else {
+      setStatus("Supplier auto-detect: no match.");
+    }
+  } catch (e) {
+    toast("Detect failed: " + e.message);
+  } finally {
+    showProgress(false);
+  }
+}
+
+/* =========================================================
+   SUPABASE PAGED READ
+   ========================================================= */
+async function fetchAllProductRows(pageSize = 1000) {
+  const allRows = [];
+  let from = 0;
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await db
+      .from("products")
+      .select("short_description, latest_supplier")
+      .not("short_description", "is", null)
+      .range(from, to);
+    if (error) throw error;
+    const page = data || [];
+    allRows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+    if (from > 1000000) {
+      throw new Error("Product retrieval exceeded the 1,000,000-row safety limit.");
+    }
+  }
+  return allRows;
+}
+
+function resolveSupplierId(rawSupplier, suppliersByName) {
+  if (rawSupplier === null || rawSupplier === undefined || rawSupplier === "") return 0;
+  const raw = cleanText(rawSupplier);
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return suppliersByName.get(raw.toLowerCase()) || 0;
+}
+
+/* =========================================================
+   MATCH PRODUCTS (DB)
+   ========================================================= */
+$("matchDbBtn").addEventListener("click", async () => {
+  if (!state.headers.length) return toast("Create table first.");
+
+  const descIdx = findDescriptionColumnIndex(state.headers);
+  if (descIdx === null) return toast("No description column found.", 4000);
+
+  const button = $("matchDbBtn");
+  if (button.disabled) return;
+
+  try {
+    button.disabled = true;
+    showProgress(true);
+    setStatus("Loading all product records from Supabase...");
+    setProgress(5);
+
+    const products = await fetchAllProductRows(1000);
+    if (!products.length) {
+      toast("No products found in the products table.");
+      return;
+    }
+
+    setProgress(35);
+    setStatus(`Preparing matching index from ${products.length.toLocaleString()} products...`);
+
+    await loadSuppliers();
+    const suppliersByName = new Map();
+    for (const supplier of state.suppliers) {
+      suppliersByName.set(supplier.name.toLowerCase(), supplier.id);
+    }
+
+    const normalized = [];
+    for (const product of products) {
+      const description = cleanText(product.short_description);
+      if (!description) continue;
+      const norm = normAlnum(description);
+      if (norm.length < 3) continue;
+      normalized.push({
+        supplier_id: resolveSupplierId(product.latest_supplier, suppliersByName),
+        short_desc: description,
+        norm
+      });
+    }
+
+    if (!normalized.length) {
+      toast("No valid Short Description values were found.");
+      return;
+    }
+
+    const index = buildProductIndex(normalized);
+    state.lastMatchIndex = index;
+    setProgress(55);
+
+    let finalIdx = findExactHeader(state.headers, "Final Description");
+    let statusIdx = findExactHeader(state.headers, "Status");
+    let remarksIdx = findExactHeader(state.headers, "Remarks");
+
+    if (finalIdx === -1) {
+      state.headers.push("Final Description");
+      finalIdx = state.headers.length - 1;
+      state.rows.forEach(row => row.push(""));
+    }
+    if (statusIdx === -1) {
+      state.headers.push("Status");
+      statusIdx = state.headers.length - 1;
+      state.rows.forEach(row => row.push(""));
+    }
+    if (remarksIdx === -1) {
+      state.headers.push("Remarks");
+      remarksIdx = state.headers.length - 1;
+      state.rows.forEach(row => row.push(""));
+    } else {
+      state.rows.forEach(row => { row[remarksIdx] = ""; });
+    }
+
+    const pinned = state.currentSupplierId != null
+      ? Number(state.currentSupplierId)
+      : null;
+
+    let matched = 0;
+    let mixed = 0;
+    let newRows = 0;
+    let otherSupplier = 0;
+
+    const totalRows = state.rows.length;
+
+    state.rows.forEach((row, rowIndex) => {
+      const description = row[descIdx] || "";
+      const codes = extractCodeCandidates(description);
+
+      if (!codes.length) {
+        row[finalIdx] = "";
+        row[statusIdx] = "";
+        row[remarksIdx] = "";
+        return;
+      }
+
+      const parts = [];
+      const seenDescriptions = new Set();
+      let matchedHere = 0;
+      let unmatchedHere = 0;
+      let otherSupplierHit = false;
+
+      for (const code of codes) {
+        const result = findBestMatch(code, index, pinned);
+        if (result.desc) {
+          const key = result.desc.toUpperCase();
+          if (!seenDescriptions.has(key)) {
+            seenDescriptions.add(key);
+            parts.push(result.desc);
+          }
+          matchedHere++;
+          if (
+            pinned !== null &&
+            result.supplier !== null &&
+            result.supplier !== undefined &&
+            Number(result.supplier) !== Number(pinned)
+          ) {
+            otherSupplierHit = true;
+          }
+        } else {
+          parts.push("/" + code);
+          unmatchedHere++;
+        }
+      }
+
+      row[finalIdx] = parts.join(" / ");
+
+      if (otherSupplierHit) {
+        row[statusIdx] = "MATCHED-OTHER-SUPPLIER";
+        otherSupplier++;
+        row[remarksIdx] = "OLD";
+      } else if (unmatchedHere === 0 && matchedHere > 0) {
+        row[statusIdx] = "MATCHED";
+        matched++;
+        row[remarksIdx] = "OLD";
+      } else if (matchedHere === 0 && unmatchedHere > 0) {
+        row[statusIdx] = "NEW";
+        newRows++;
+        row[remarksIdx] = "";
+      } else {
+        row[statusIdx] = "MIXED";
+        mixed++;
+        row[remarksIdx] = "OLD";
+      }
+
+      if (rowIndex % 25 === 0) {
+        setProgress(55 + Math.round(((rowIndex + 1) / Math.max(totalRows, 1)) * 40));
+      }
+    });
+
+    renderTable();
+    setProgress(100);
+
+    const supplierNote = pinned !== null
+      ? `Supplier ID ${pinned} boost applied`
+      : "No supplier boost";
+
+    const summary =
+      `DB match complete (${supplierNote}): ` +
+      `MATCHED ${matched}, MIXED ${mixed}, NEW ${newRows}, ` +
+      `OTHER-SUPPLIER ${otherSupplier}.`;
+
+    setStatus(summary);
+    toast(
+      `MATCHED ${matched} | MIXED ${mixed} | NEW ${newRows} | OTHER ${otherSupplier}`,
+      6000
+    );
+
+    aiLog(summary);
+    aiLog(`Loaded ${products.length} database rows; indexed ${normalized.length} valid product descriptions.`);
+  } catch (err) {
+    console.error(err);
+    aiLog("Database matching failed: " + (err.message || err));
+    toast("Match failed: " + (err.message || err), 6000);
+    setStatus("Database matching failed: " + (err.message || err));
+  } finally {
+    button.disabled = false;
+    showProgress(false);
+  }
+});
+
+/* =========================================================
+   AI VERIFY / EXPLAIN / SETTINGS / TEST (Puter.js)
+   ========================================================= */
+function updateAiStatus() {
+  $("aiStatus").textContent = `AI: Puter.js (No Key)`;
+}
+
+$("aiConfigBtn").addEventListener("click", async () => {
+  alert("AI is powered by Puter.js.\n\nNo API key is required. When you use an AI feature for the first time, a Puter login window will appear. Sign in (or create a free account) to cover your own AI usage. This keeps the app free for the developer.");
+});
+
+async function callAI(payload) {
+  try {
+    let prompt;
+    if (payload.task === "verify_match") {
+      prompt = `Does the OCR description "${payload.description}" refer to the same product as the candidate "${payload.candidate}"? Respond with JSON: {"confidence": 0.0-1.0, "reason": "short explanation"}`;
+    } else if (payload.task === "explain_match") {
+      prompt = `Explain why OCR description "${payload.description}" matches candidate "${payload.candidate}". Extracted codes: ${JSON.stringify(payload.codesExtracted)}. Respond with JSON: {"confidence": 0.0-1.0, "reason": "short explanation"}`;
+    } else if (payload.task === "ping") {
+      return { ok: true, provider: "puter.js", model: "gpt-5-nano" };
+    } else {
+      prompt = JSON.stringify(payload);
+    }
+
+    const response = await puter.ai.chat(prompt, { model: "gpt-5-nano" });
+    const content = response.message?.content || response.toString();
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { confidence: 0.5, reason: content.slice(0, 100) };
+    aiLog(`Puter.js (${parsed.confidence}): ${parsed.reason}`);
+    return parsed;
+  } catch (e) {
+    aiLog("Puter.js call failed: " + e.message);
+    return null;
+  }
+}
+
+function localVerify(desc, candidate) {
+  const tok = s => new Set(normAlnum(s).match(/.{1,3}/g) || []);
+  const a = tok(desc), b = tok(candidate);
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / Math.max(a.size, b.size);
+}
+
+$("aiVerifyBtn").addEventListener("click", async () => {
+  if (!state.rows.length) return toast("No rows to verify.");
+  const descIdx = findDescriptionColumnIndex(state.headers);
+  const finalIdx = findExactHeader(state.headers, "Final Description");
+  const statusIdx = findExactHeader(state.headers, "Status");
+  if (descIdx === null || finalIdx === -1 || statusIdx === -1) return toast("Run Match first.");
+
+  showProgress(true);
+  setStatus("AI verifying matches...");
+  aiLog("AI verify started (Puter.js).");
+  let improved = 0;
+  try {
+    for (let ri = 0; ri < state.rows.length; ri++) {
+      setProgress((ri / state.rows.length) * 100);
+      const row = state.rows[ri];
+      const desc = row[descIdx] || "";
+      const final = row[finalIdx] || "";
+      if (!final || final.startsWith("/")) continue;
+      const aiResult = await callAI({ task: "verify_match", description: desc, candidate: final });
+      let score = (aiResult && typeof aiResult.confidence === "number")
+        ? aiResult.confidence
+        : localVerify(desc, final);
+      if (score < 0.45 && String(row[statusIdx]).startsWith("MATCHED")) {
+        row[statusIdx] = "MIXED";
+        improved++;
+      }
+    }
+    renderTable();
+    setStatus(`AI verification: ${improved} flagged.`);
+    toast(`AI verification: ${improved} flagged.`, 4000);
+  } catch (e) {
+    toast("AI verify error: " + e.message);
+  } finally {
+    showProgress(false);
+  }
+});
+
+$("aiExplainBtn").addEventListener("click", async () => {
+  if (!state.rows.length) return toast("No rows.");
+  const descIdx = findDescriptionColumnIndex(state.headers);
+  const finalIdx = findExactHeader(state.headers, "Final Description");
+  if (descIdx === null || finalIdx === -1) return toast("Run Match first.");
+  const row = state.rows[0];
+  const desc = row[descIdx] || "";
+  const final = row[finalIdx] || "";
+  const codes = extractCodeCandidates(desc);
+  const explanation = {
+    description: desc,
+    candidate: final,
+    codesExtracted: codes,
+    matchScore: codes.length && final
+      ? Math.max(...codes.map(c => findBestMatch(c, state.lastMatchIndex || buildProductIndex([]), state.currentSupplierId).score))
+      : 0,
+  };
+  const aiResult = await callAI({ task: "explain_match", ...explanation });
+  $("aiLog").textContent = JSON.stringify(aiResult || explanation, null, 2);
+  switchTab("debug");
+});
+
+$("testAiBtn").addEventListener("click", async () => {
+  aiLog("Testing Puter.js AI...");
+  try {
+    const r = await callAI({ task: "ping" });
+    aiLog(r ? "✅ Puter.js AI OK: " + JSON.stringify(r) : "❌ AI returned null.");
+    toast(r ? "AI working" : "AI failed");
+  } catch (e) {
+    aiLog("❌ " + e.message);
+    toast("AI test failed");
+  }
+});
+
+/* =========================================================
+   FILE GENERATION + SHARE
+   ========================================================= */
+function buildRowPayload(rule) {
+  const finalIdx = findExactHeader(state.headers, "Final Description");
+  const statusIdx = findExactHeader(state.headers, "Status");
+  if (finalIdx === -1 || statusIdx === -1) return null;
+  const qtyIdx = findQtyColumnIndex(state.headers);
+  const costIdx = findCostColumnIndex(state.headers);
+  const includeQty = $("includeQty").checked;
+  const includeCost = $("includeCost").checked;
+  const rows = [];
+  let oldCount = 0, blankCount = 0;
+  state.rows.forEach(row => {
+    const status = String(row[statusIdx] || "").toUpperCase();
+    if (rule === "matched" && !status.startsWith("MATCHED")) return;
+    if (rule === "new" && status !== "NEW") return;
+    let remarks;
+    if (rule === "matched") remarks = "OLD";
+    else if (rule === "new") remarks = "";
+    else remarks = (status === "" || status === "NEW") ? "" : "OLD";
+    if (remarks === "OLD") oldCount++; else blankCount++;
+    rows.push([
+      remarks,
+      row[finalIdx] || "",
+      "",
+      includeCost && costIdx !== null ? row[costIdx] || "" : "",
+      "",
+      includeQty && qtyIdx !== null ? row[qtyIdx] || "" : "",
+    ]);
+  });
+  return { rows, oldCount, blankCount };
+}
+
+const HEADERS_6COL = ["REMARKS", "PRODUCT NAME", "GROUP", "COST", "PRICE", "QTY"];
+
+function generateCsvBlob(dataRows) {
+  const csv = [HEADERS_6COL, ...dataRows].map(r =>
+    r.map(c => {
+      const s = String(c == null ? "" : c);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(",")
+  ).join("\r\n");
+  return new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+}
+function generateXlsxBlob(dataRows) {
+  const wb = XLSX.utils.book_new();
+  const aoa = [HEADERS_6COL, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 10 }, { wch: 45 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 8 }];
+  XLSX.utils.book_append_sheet(wb, ws, "RKSCAN");
+  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+async function shareOrDownload(blob, filename, mime) {
+  const file = new File([blob], filename, { type: mime });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "RKSCAN Export", text: filename });
+      return "shared";
+    } catch (err) {
+      if (err.name === "AbortError") return "cancelled";
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return "downloaded";
+}
+
+async function exportAndShare(rule, format) {
+  const payload = buildRowPayload(rule);
+  if (!payload) return toast("Run Match first.");
+  if (!payload.rows.length) return toast("No matching rows to export.");
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const labelMap = { matched: "MATCHED", new: "NEW", both: "BOTH" };
+  const label = labelMap[rule];
+  try {
+    showProgress(true);
+    let blob, filename, mime;
+    if (format === "xlsx") {
+      blob = generateXlsxBlob(payload.rows);
+      filename = `RKSCAN_${label}_${ts}.xlsx`;
+      mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    } else {
+      blob = generateCsvBlob(payload.rows);
+      filename = `RKSCAN_${label}_${ts}.csv`;
+      mime = "text/csv;charset=utf-8";
+    }
+    const result = await shareOrDownload(blob, filename, mime);
+    if (result === "shared") toast(`Shared ${payload.rows.length} row(s).`, 4000);
+    else if (result === "downloaded") toast(`Downloaded ${filename}`, 4000);
+  } catch (err) {
+    toast("Export failed: " + err.message, 5000);
+  } finally {
+    showProgress(false);
+  }
+}
+
+$("shareMatchedXlsx").addEventListener("click", () => exportAndShare("matched", "xlsx"));
+$("shareMatchedCsv").addEventListener("click", () => exportAndShare("matched", "csv"));
+$("shareNewXlsx").addEventListener("click", () => exportAndShare("new", "xlsx"));
+$("shareNewCsv").addEventListener("click", () => exportAndShare("new", "csv"));
+$("shareBothXlsx").addEventListener("click", () => exportAndShare("both", "xlsx"));
+$("shareBothCsv").addEventListener("click", () => exportAndShare("both", "csv"));
+
+/* =========================================================
+   AI INVOICE CHAT (Using Puter.js)
+   ========================================================= */
+const CHAT_EXCEL_HEADERS = ["remarks", "product name", "group", "cost", "price", "qty", "barcode", "description"];
+const chatState = {
+  files: [], messages: [], generalMessages: [], items: [], invoice: {},
+  busy: false, mode: "general",
+  allTables: []
+};
+
+function markdownTableToArray(mdTable) {
+  const rows = mdTable
+    .map(line => line.trim())
+    .filter(line => line.startsWith("|") && line.endsWith("|"))
+    .map(line => line.slice(1, -1).split("|").map(c => c.trim()));
+  return rows.filter(r => !r.every(c => /^:?-{2,}:?$/.test(c)));
+}
+
+function extractMarkdownTables(text) {
+  const tables = [];
+  const lines = String(text || "").split(/\r?\n/);
+  let buffer = [];
+  for (const line of lines) {
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      buffer.push(line);
+    } else {
+      if (buffer.length >= 2) tables.push(markdownTableToArray(buffer));
+      buffer = [];
+    }
+  }
+  if (buffer.length >= 2) tables.push(markdownTableToArray(buffer));
+  return tables;
+}
+
+function renderMarkdownTables(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const out = [];
+  let tableBuf = [];
+  const flushTable = () => {
+    if (tableBuf.length < 2) { out.push(tableBuf.join("\n")); tableBuf = []; return; }
+    const arr = markdownTableToArray(tableBuf);
+    if (!arr.length) { out.push(tableBuf.join("\n")); tableBuf = []; return; }
+    const header = arr[0];
+    const body = arr.slice(1);
+    let html = '<table class="md-table"><thead><tr>' +
+      header.map(c => `<th>${escapeHtml(c)}</th>`).join("") +
+      '</tr></thead><tbody>' +
+      body.map(r => "<tr>" + r.map(c => `<td>${escapeHtml(c)}</td>`).join("") + "</tr>").join("") +
+      '</tbody></table>';
+    out.push(html);
+    tableBuf = [];
+  };
+  for (const line of lines) {
+    if (/^\s*\|.*\|\s*$/.test(line)) tableBuf.push(line);
+    else { flushTable(); out.push(line); }
+  }
+  flushTable();
+  return out.join("\n");
+}
+
+function renderChatText(text) {
+  let html = escapeHtml(renderMarkdownTables(text));
+  html = html.replace(/```([\w+-]*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code}</code></pre>`);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|\n)###\s+(.+)/g, "$1<strong>$2</strong>");
+  html = html.replace(/&lt;table class=&quot;md-table&quot;&gt;/g, '<table class="md-table">')
+             .replace(/&lt;\/table&gt;/g, "</table>")
+             .replace(/&lt;thead&gt;/g, "<thead>")
+             .replace(/&lt;\/thead&gt;/g, "</thead>")
+             .replace(/&lt;tbody&gt;/g, "<tbody>")
+             .replace(/&lt;\/tbody&gt;/g, "</tbody>")
+             .replace(/&lt;tr&gt;/g, "<tr>")
+             .replace(/&lt;\/tr&gt;/g, "</tr>")
+             .replace(/&lt;th&gt;/g, "<th>")
+             .replace(/&lt;\/th&gt;/g, "</th>")
+             .replace(/&lt;td&gt;/g, "<td>")
+             .replace(/&lt;\/td&gt;/g, "</td>");
+  html = html.replace(/\n/g, "<br>");
+  return html;
+}
+
+function downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function addChatBubble(role, message) {
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble " + (role === "user" ? "user" : "assistant");
+  const heading = document.createElement("div");
+  heading.className = "chat-role";
+  heading.textContent = role === "user" ? "You" : "RK AI Assistant";
+  const body = document.createElement("div");
+  body.className = "chat-body";
+  if (role === "assistant") body.innerHTML = renderChatText(message);
+  else body.textContent = message;
+  bubble.append(heading, body);
+
+  if (role === "assistant") {
+    const copy = document.createElement("button");
+    copy.type = "button"; copy.className = "chat-copy"; copy.textContent = "Copy response";
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(String(message ?? "")); copy.textContent = "Copied"; }
+      catch (_) { toast("Clipboard access is unavailable in this browser."); }
+    });
+    bubble.appendChild(copy);
+
+    const tables = extractMarkdownTables(message);
+    if (tables.length) {
+      tables.forEach(t => chatState.allTables.push(t));
+      updateDownloadAllState();
+
+      const dl = document.createElement("div");
+      dl.className = "chat-download-row";
+
+      const xlsBtn = document.createElement("button");
+      xlsBtn.type = "button"; xlsBtn.className = "btn ok small";
+      xlsBtn.textContent = "⬇ Excel";
+      xlsBtn.addEventListener("click", () => exportTableArraysToExcel([tables[0]], "AI_Reply"));
+
+      const csvBtn = document.createElement("button");
+      csvBtn.type = "button"; csvBtn.className = "btn secondary small";
+      csvBtn.textContent = "⬇ CSV";
+      csvBtn.addEventListener("click", () => exportTableArraysToCsv([tables[0]], "AI_Reply"));
+
+      const allBtn = document.createElement("button");
+      allBtn.type = "button"; allBtn.className = "btn warn small";
+      allBtn.textContent = "⬇ Excel (all tables)";
+      allBtn.addEventListener("click", () => exportTableArraysToExcel(tables, "AI_Reply_All"));
+
+      dl.append(xlsBtn, csvBtn);
+      if (tables.length > 1) dl.appendChild(allBtn);
+      bubble.appendChild(dl);
+    }
+  }
+
+  $("chatMessages").appendChild(bubble);
+  $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
+}
+
+function exportTableArraysToExcel(tables, baseName) {
+  if (!tables || !tables.length) return toast("No tables to export.");
+  const wb = XLSX.utils.book_new();
+  tables.forEach((tbl, idx) => {
+    if (!tbl.length) return;
+    const ws = XLSX.utils.aoa_to_sheet(tbl);
+    const cols = Math.max(...tbl.map(r => r.length));
+    ws["!cols"] = new Array(cols).fill({ wch: 18 });
+    const name = (tables.length > 1 ? `Table${idx+1}` : "Table").slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  if (!wb.SheetNames.length) return toast("No tables to export.");
+  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  downloadBlobAsFile(blob, `${baseName}_${ts}.xlsx`);
+  toast(`Exported ${tables.length} table(s) to Excel.`);
+}
+
+function exportTableArraysToCsv(tables, baseName) {
+  if (!tables || !tables.length) return toast("No tables to export.");
+  const tbl = tables[0];
+  const csv = tbl.map(r =>
+    r.map(c => {
+      const s = String(c == null ? "" : c);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(",")
+  ).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  downloadBlobAsFile(blob, `${baseName}_${ts}.csv`);
+  toast("Exported CSV.");
+}
+
+function updateDownloadAllState() {
+  const btn = $("chatDownloadAllBtn");
+  if (btn) btn.disabled = chatState.allTables.length === 0;
+}
+$("chatDownloadAllBtn").addEventListener("click", () => {
+  if (!chatState.allTables.length) return toast("No AI tables yet.");
+  exportTableArraysToExcel(chatState.allTables, "RKSCAN_All_AI_Tables");
+});
+
+function updateChatButtons() {
+  $("chatExcelBtn").disabled = !chatState.items.length || chatState.busy;
+  $("chatToTableBtn").disabled = !chatState.items.length || chatState.busy;
+  $("chatSendBtn").disabled = chatState.busy;
+  $("chatSendBtn").textContent = chatState.busy ? "Processing…" : "➤ Send";
+  $("chatState").textContent = chatState.busy ? "AI is processing…" : "Ready (Puter.js)";
+  $("chatResultsWrap").hidden = chatState.mode !== "invoice" && !chatState.items.length;
+  updateDownloadAllState();
+}
+
+function setChatMode(mode) {
+  chatState.mode = mode === "invoice" ? "invoice" : "general";
+  $("chatModeSelect").value = chatState.mode;
+  $("chatPrompt").placeholder = chatState.mode === "invoice"
+    ? "Describe what to extract or correct. Example: Extract every item; DOZ quantity × 12 and cost ÷ 12."
+    : "Message RK AI Assistant… (Enter to send)";
+  $("chatFiles").accept = "image/jpeg,image/png,image/webp,image/bmp";
+  $("chatExcelBtn").style.display = chatState.mode === "invoice" || chatState.items.length ? "" : "none";
+  $("chatToTableBtn").style.display = chatState.mode === "invoice" || chatState.items.length ? "" : "none";
+  updateChatButtons();
+}
+
+function renderChatItems() {
+  const thead = $("chatResultsTable").querySelector("thead");
+  const tbody = $("chatResultsTable").querySelector("tbody");
+  thead.innerHTML = ""; tbody.innerHTML = "";
+  const hr = document.createElement("tr");
+  CHAT_EXCEL_HEADERS.forEach(h => { const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
+  thead.appendChild(hr);
+  chatState.items.forEach((item, ri) => {
+    const tr=document.createElement("tr");
+    CHAT_EXCEL_HEADERS.forEach((key) => {
+      const td=document.createElement("td"); td.contentEditable="true";
+      td.textContent = item[key] == null ? "" : String(item[key]);
+      td.addEventListener("input", () => { item[key] = td.textContent.trim(); });
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  $("chatResultsTitle").textContent = chatState.items.length
+    ? `Extracted invoice rows — ${chatState.items.length} item(s). Cells are editable; review before export.`
+    : "Extracted invoice rows — no results yet";
+  updateChatButtons();
+}
+
+function normaliseChatItem(raw) {
+  const out = {};
+  CHAT_EXCEL_HEADERS.forEach(k => { out[k] = raw?.[k] ?? raw?.[k.replace(/\s+/g,"_")] ?? ""; });
+  out.barcode = String(out.barcode ?? "");
+  out.description = cleanText(out.description);
+  out["product name"] = cleanText(out["product name"] || out.description);
+  return out;
+}
+
+async function imageFileToDataUrl(file) {
+  if (!file.type.startsWith("image/")) throw new Error(`${file.name}: only image files are supported.`);
+  if (file.size > 18 * 1024 * 1024) throw new Error(`${file.name}: image is larger than 18 MB.`);
+  const dataUrl = await new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error("Could not read " + file.name));
+    reader.readAsDataURL(file);
+  });
+  const img = new Image();
+  await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=dataUrl; });
+  const maxSide = 2200;
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth,img.naturalHeight));
+  if (scale >= 1) return dataUrl;
+  const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*scale); c.height=Math.round(img.naturalHeight*scale);
+  c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL("image/jpeg",0.88);
+}
+
+const INVOICE_CHAT_SYSTEM = `You are RK Invoice AI, an accuracy-first invoice extraction assistant. Analyze the user's uploaded invoice images and follow-up instructions. Do not invent unreadable values. Preserve printed product codes/barcodes exactly as strings, including leading zeroes. Extract every visible item row and do not silently omit rows. If a value is uncertain, leave it blank and explain the uncertainty in assistant_message.
+
+Return ONLY valid JSON with this shape:
+{"assistant_message":"short useful explanation","invoice":{"supplier":"","invoice_number":"","date":"","currency":"","invoice_total":""},"items":[{"remarks":"","product name":"","group":"","cost":"","price":"","qty":"","barcode":"","description":"","source_qty":"","source_unit":"","source_price":"","confidence":"high|medium|low","note":""}],"questions":[]}
+
+Excel output fields must be exactly represented by: remarks, product name, group, cost, price, qty, barcode, description. Keep unavailable fields blank. If product name is not separately printed, use the readable item name/description; keep the full original line in description. Do not guess group or barcode.
+
+UNIT AND PRICE RULES:
+1. For items explicitly sold in DOZ/dozen, calculate final qty = printed quantity * 12, and cost = printed unit price / 12. Keep price as the original printed price.
+2. For pieces/PCS, preserve the actual piece count and printed price unless the user explicitly instructs another conversion.
+3. Specific instruction supplied by the user for Farah Fashion invoice 8279: item 01 quantity expression '1+7 Pcs' means 8 pieces; for this specific item the requested output qty is 8*12 = 96 and cost is 230/12. Other items on that invoice are DOZ quantity 1 and follow rule 1.
+4. Apply only conversions supported by the invoice or user's instructions. Never apply x12 or /12 twice when continuing a chat.
+5. Do not use a product database match to rewrite the original description. Product matching is a separate PWA step.
+
+For follow-up messages, update the existing extraction rather than discarding it. If user asks to correct a value, update the relevant row and return the complete current items array. If images are attached, inspect all of them. Keep numeric values as decimal strings where useful (for example 21.6667). Do not round to two decimals unless asked.`;
+
+async function sendGeneralChat() {
+  if (chatState.busy) return;
+  const prompt = $("chatPrompt").value.trim();
+  const files = chatState.files.slice();
+  if (!prompt && !files.length) { toast("Type a message or attach an image."); return; }
+  chatState.busy = true; updateChatButtons();
+  try {
+    const userText = [prompt, files.length ? `Attached image(s): ${files.map(f => f.name).join(", ")}` : ""].filter(Boolean).join("\n") || "Please describe this image.";
+
+    let content = userText;
+    if (files.length) {
+      const dataUrl = await imageFileToDataUrl(files[0]);
+      addChatBubble("user", userText);
+
+      const response = await puter.ai.chat(
+        userText,
+        dataUrl,
+        { model: "gpt-5-nano" }
+      );
+
+      const answer = response.message?.content || response.toString();
+      chatState.generalMessages.push({ role: "user", content: userText });
+      chatState.generalMessages.push({ role: "assistant", content: answer });
+      addChatBubble("assistant", answer);
+    } else {
+      addChatBubble("user", userText);
+      chatState.generalMessages.push({ role: "user", content: userText });
+
+      const response = await puter.ai.chat(userText, { model: "gpt-5-nano" });
+      const answer = response.message?.content || response.toString();
+      chatState.generalMessages.push({ role: "assistant", content: answer });
+      addChatBubble("assistant", answer);
+    }
+
+    $("chatPrompt").value = ""; chatState.files = []; $("chatFiles").value = ""; $("chatFileNames").textContent = "No files selected";
+  } catch (e) {
+    addChatBubble("assistant", "I could not complete the request: " + e.message);
+    toast("AI Chat failed: " + e.message, 6000);
+  } finally { chatState.busy = false; updateChatButtons(); }
+}
+
+async function sendInvoiceChat() {
+  if (chatState.busy) return;
+  const prompt = $("chatPrompt").value.trim();
+  const files = chatState.files.slice();
+  if (!prompt && !files.length) { toast("Type a message or attach invoice images."); return; }
+  chatState.busy=true; updateChatButtons();
+  try {
+    const userText = [prompt || "Please extract all invoice details and item rows from the attached image(s).", files.length ? `Attached files: ${files.map(f=>f.name).join(", ")}` : ""].filter(Boolean).join("\n");
+
+    addChatBubble("user", userText + (files.length ? `\n📎 ${files.length} image(s)` : ""));
+
+    let response;
+    if (files.length) {
+      const dataUrl = await imageFileToDataUrl(files[0]);
+      response = await puter.ai.chat(
+        INVOICE_CHAT_SYSTEM + "\n\n" + userText,
+        dataUrl,
+        { model: "liquid/lfm3-vl-2b" }
+      );
+    } else {
+      response = await puter.ai.chat(
+        INVOICE_CHAT_SYSTEM + "\n\n" + userText,
+        { model: "gpt-5-nano" }
+      );
+    }
+
+    const raw = response.message?.content || response.toString();
+    const parsed = parseModelJson(raw);
+    chatState.items=Array.isArray(parsed.items) ? parsed.items.map(normaliseChatItem) : chatState.items;
+    chatState.invoice=parsed.invoice || chatState.invoice;
+    const assistantText=String(parsed.assistant_message || "Invoice analysis updated.") + (Array.isArray(parsed.questions)&&parsed.questions.length ? "\nQuestions: " + parsed.questions.join("; ") : "");
+    addChatBubble("assistant", assistantText + (chatState.items.length ? `\n\nCurrent extracted rows: ${chatState.items.length}` : "\n\nNo item rows were returned. Please upload a clearer image or specify the item table area."));
+    renderChatItems();
+    $("chatPrompt").value=""; chatState.files=[]; $("chatFiles").value=""; $("chatFileNames").textContent="No files selected";
+    if (chatState.items.length) toast(`AI extracted/updated ${chatState.items.length} row(s).`,5000);
+  } catch(e) {
+    addChatBubble("assistant", "I could not complete the extraction: " + e.message);
+    toast("Invoice extraction failed: " + e.message,6000);
+  } finally { chatState.busy=false; updateChatButtons(); }
+}
+
+function sendChatMessage() {
+  return chatState.mode === "invoice" ? sendInvoiceChat() : sendGeneralChat();
+}
+
+$("chatFiles").addEventListener("change", e => {
+  chatState.files=Array.from(e.target.files || []);
+  $("chatFileNames").textContent=chatState.files.length ? chatState.files.map(f=>f.name).join(", ") : "No images selected";
+});
+$("chatSendBtn").addEventListener("click", sendChatMessage);
+$("chatSettingsBtn").addEventListener("click", () => $("aiConfigBtn").click());
+$("chatModeSelect").addEventListener("change", e => {
+  setChatMode(e.target.value);
+  addChatBubble("assistant", chatState.mode === "invoice"
+    ? "Invoice Extraction mode is active. Attach invoice images and describe any special conversion rules."
+    : "General Assistant mode is active. Ask me anything, or attach an image for analysis.");
+});
+$("chatPrompt").addEventListener("keydown", e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } });
+$("chatClearBtn").addEventListener("click", () => {
+  if (!confirm("Start a new conversation? Existing extracted invoice rows will be kept.")) return;
+  chatState.files=[]; chatState.messages=[]; chatState.generalMessages=[];
+  $("chatMessages").innerHTML="";
+  addChatBubble("assistant", chatState.mode === "invoice"
+    ? "New invoice conversation started. Attach invoice images and tell me what to extract."
+    : "New conversation started. How can I help you?");
+  $("chatPrompt").value=""; $("chatFiles").value=""; $("chatFileNames").textContent="No files selected";
+  updateChatButtons();
+});
+
+function generateChatExcel() {
+  if (!chatState.items.length) return toast("No AI invoice rows to export.");
+  const numericFields = new Set(["cost", "price", "qty"]);
+  const aoa=[CHAT_EXCEL_HEADERS, ...chatState.items.map(item=>CHAT_EXCEL_HEADERS.map(k=>{
+    const value = item[k] ?? "";
+    if (numericFields.has(k) && value !== "" && /^-?\d+(?:\.\d+)?$/.test(String(value).trim())) return Number(value);
+    return value;
+  }))];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"]=[{wch:14},{wch:32},{wch:16},{wch:14},{wch:14},{wch:12},{wch:20},{wch:55}];
+  ws["!autofilter"]={ref:`A1:H${aoa.length}`};
+  for (let r=1;r<aoa.length;r++) { const cell=ws[XLSX.utils.encode_cell({r,c:6})]; if(cell){cell.t="s";cell.v=String(cell.v??"");} }
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Invoice Items");
+  const meta=[ ["Supplier",chatState.invoice.supplier||""],["Invoice Number",chatState.invoice.invoice_number||""],["Date",chatState.invoice.date||""],["Currency",chatState.invoice.currency||""],["Invoice Total",chatState.invoice.invoice_total||""] ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(meta),"Invoice Details");
+  const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const safe=(chatState.invoice.supplier||"Invoice").replace(/[^A-Za-z0-9_-]+/g,"_").slice(0,35);
+  const no=(chatState.invoice.invoice_number||new Date().toISOString().slice(0,10)).toString().replace(/[^A-Za-z0-9_-]+/g,"_");
+  downloadBlobAsFile(blob, `RKSCAN_AI_${safe}_${no}.xlsx`);
+  toast("Excel generated. Please verify invoice values before posting.",4500);
+}
+$("chatExcelBtn").addEventListener("click",generateChatExcel);
+$("chatToTableBtn").addEventListener("click", () => {
+  if (!chatState.items.length) return;
+  state.headers=["Description","Qty ×12","Cost ÷12","Barcode"];
+  state.rows=chatState.items.map(x=>[x.description||x["product name"]||"",x.qty||"",x.cost||"",x.barcode||""]);
+  state.selectedRows.clear(); renderTable(); switchTab("table");
+  toast("AI rows copied to Product Matching.",5000);
+});
+setChatMode("general");
+renderChatItems();
+
+/* =========================================================
+   DIAGNOSTIC
+   ========================================================= */
+$("diagBtn").addEventListener("click", async () => {
+  try {
+    aiLog("Running diagnostic...");
+    const products = await fetchAllProductRows(1000);
+    aiLog(`Products fetched across pages: ${products.length}`);
+    await loadSuppliers(true);
+    aiLog(`Suppliers loaded: ${state.suppliers.length}`);
+    aiLog("AI: Puter.js (No Key Required)");
+  } catch (error) {
+    aiLog("Diagnostic failed: " + (error.message || error));
+  }
+});
+
+$("testMatchBtn").addEventListener("click", async () => {
+  try {
+    const testCodes = ["385621A", "A585442", "A5854420", "3S5621A"];
+    const products = await fetchAllProductRows(1000);
+    await loadSuppliers();
+    const suppliersByName = new Map(
+      state.suppliers.map(s => [s.name.toLowerCase(), s.id])
+    );
+    const normalized = products.map(product => ({
+      supplier_id: resolveSupplierId(product.latest_supplier, suppliersByName),
+      short_desc: cleanText(product.short_description),
+      norm: normAlnum(product.short_description)
+    })).filter(product => product.norm.length >= 3);
+    const index = buildProductIndex(normalized);
+    aiLog("=== TEST MATCH (PYTHON RULES) ===");
+    aiLog(`Database rows fetched: ${products.length}; indexed: ${normalized.length}`);
+    for (const code of testCodes) {
+      const result = findBestMatch(code, index, null);
+      aiLog(`${code} → ${result.desc || "(no match)"} [${result.score}]`);
+    }
+  } catch (error) {
+    aiLog("Test Match failed: " + (error.message || error));
+  }
+});
+
+/* =========================================================
+   SERVICE WORKER
+   ========================================================= */
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(err => {
+      console.warn("SW registration failed", err);
+    });
+  });
+}
+
+/* =========================================================
+   BOOT
+   ========================================================= */
+(function boot() {
+  setStatus("Ready. Open a file, then click 🤖 AI AUTO-SCAN.");
+  updateAiStatus();
+  loadSuppliers().catch(() => {});
+  aiLog("AI: Puter.js ready. No API key needed. User login may be required on first AI use.");
+  if (location.protocol === "file:") {
+    toast("⚠️ Camera & PWA won't work from file:// — use http://localhost", 10000);
+  }
+})();
+</script>
+</body>
+</html>
